@@ -12,6 +12,15 @@ await mkdir(outputDirectory); // Must not reuse a directory containing user file
 const hash = async file => createHash('sha256').update(await readFile(file)).digest('hex');
 const missing = async file => { try { await stat(file); return false; } catch (e) { if (e.code === 'ENOENT') return true; throw e; } };
 const options = await callRevit('get_family_authoring_options');
+const hasProject = (await callRevit('revit_ping')).activeDocumentOpen;
+const checkProjectPreview = async () => {
+  if (!hasProject) return;
+  // This legacy preview only reads levels and records a plan; it does not start
+  // a transaction or change the active model. Never apply this diagnostic plan.
+  const preview = await callRevit('preview_create_levels', {levels:[{name:'MCP lifecycle check '+Date.now(),elevationMeters:0}]});
+  assert.equal(preview.planCreated,true,'Project previews remain usable after temporary documents close');
+};
+await checkProjectPreview();
 const length = options.dataTypes.find(t => t.id.startsWith('autodesk.spec.aec:length-'));
 assert.ok(length, 'Length spec is available');
 const meters = length.units.find(u => u.id.startsWith('autodesk.unit.unit:meters-')).id;
@@ -35,6 +44,7 @@ const request = {templatePath,outputPath:source,operations:[
   connector('inlet',zero,{x:0,y:0,z:-1},'In'), connector('outlet',z,z,'Out')
 ],validation:{testConnections:true,projectTemplatePath,expected:[{typeName:'Fixture 200',connectorCount:2,values:[value('Radius',.1)],sizeMeters:{x:.4,y:.4,z:1}}]}};
 const preview = await callRevit('preview_build_family',request);
+await checkProjectPreview();
 assert.ok(preview.preview.verified.connections.passed);
 assert.ok(await missing(source),'Preview must not create output');
 const saved = await callRevit('apply_build_family',{planId:preview.planId});
@@ -55,6 +65,7 @@ const retry = await callRevit('preview_build_family',editRequest);
 assert.equal((await callRevit('apply_build_family',{planId:retry.planId})).applied,true);
 assert.equal(await hash(source),originalHash,'Source RFA is unchanged');
 const reopened = await callRevit('validate_family_file',{path:edited,...editRequest.validation});
+await checkProjectPreview();
 assert.equal(reopened.passed,true);
 assert.equal(reopened.connections.checkedConnectors,4);
 console.log(JSON.stringify({passed:true,source,edited,originalHash,checkedConnectors:reopened.connections.checkedConnectors},null,2));

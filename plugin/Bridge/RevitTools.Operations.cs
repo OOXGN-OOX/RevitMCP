@@ -9,10 +9,8 @@ namespace RevitMCP;
 
 internal static partial class RevitTools
 {
-    private sealed class Revision { public long Value; }
-    // Revit can return different managed wrappers for the same open document.
-    // Document.Equals/GetHashCode identify the native document session; reference identity does not.
-    private static readonly Dictionary<Document, Revision> Revisions = new();
+    private static readonly DocumentRevisionTracker<Document> Revisions = new(
+        document => document.IsValidObject, (left, right) => left.Equals(right));
     private static readonly Dictionary<string, OperationPlan> OperationPlans = new();
     // Revit API execution and DocumentChanged callbacks both run on the UI thread.
     private static int SimulationDepth;
@@ -64,17 +62,10 @@ internal static partial class RevitTools
     internal static void OnDocumentChanged(object? sender, DocumentChangedEventArgs args)
     {
         CapturedDeletionIds?.UnionWith(args.GetDeletedElementIds().Select(id => id.Value));
-        if (SimulationDepth == 0) GetRevision(args.GetDocument()).Value++;
+        if (SimulationDepth == 0) Revisions.Changed(args.GetDocument());
     }
 
-    private static Revision GetRevision(Document document)
-    {
-        foreach (var stale in Revisions.Keys.Where(doc => !doc.IsValidObject).ToArray()) Revisions.Remove(stale);
-        if (!Revisions.TryGetValue(document, out var revision)) Revisions[document] = revision = new Revision();
-        return revision;
-    }
-
-    private static long DocumentRevision(Document document) => GetRevision(document).Value;
+    private static long DocumentRevision(Document document) => Revisions.Get(document);
 
     private static JsonElement BindActiveView(UIApplication app, JsonElement args)
     {
