@@ -37,7 +37,7 @@ internal static partial class RevitTools
     {
         var elements = new List<object>(); var remaining = triangleLimit; var truncated = false;
         XYZ? min = null, max = null;
-        foreach (var e in new FilteredElementCollector(doc).WhereElementIsNotElementType().Where(e => e is GenericForm or FamilyInstance or GeomCombination).OrderBy(e => e.Id.Value))
+        foreach (var e in new FilteredElementCollector(doc).WhereElementIsNotElementType().Where(e => e is GenericForm or FamilyInstance or GeomCombination or ImportInstance or DirectShape).OrderBy(e => e.Id.Value))
         {
             using var options = new Options { ComputeReferences = true, IncludeNonVisibleObjects = true, DetailLevel = ViewDetailLevel.Fine };
             var geometry = e.get_Geometry(options);
