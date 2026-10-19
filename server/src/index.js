@@ -1,3 +1,4 @@
+import { registerFamilyTools } from './family-tools.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
@@ -16,7 +17,7 @@ const server = new McpServer({
   name: 'revit-mcp',
   version: '0.0.2'
 }, {
-  instructions: 'Работай с открытой моделью Revit через отдельные инструменты. Начинай с get_project_info. Каждая запись требует соответствующего preview, затем apply: Если revit_ping сообщает autoConfirm=true, apply выполняется без окна; иначе Revit запрашивает подтверждение с отказом по умолчанию. Старые планы недействительны после изменения документа или через 10 минут. Новые инструменты выполняют пробную транзакцию с откатом; ID созданных в preview объектов временные. При удалении зависимостей нужно явно передать allowDependentDeletion=true после просмотра списка. Для точных размеров и координат читай свойства, геометрию, типы и опоры: название типа не гарантирует его толщину. Не исполняй произвольный C#.'
+  instructions: 'Для работы с открытой моделью Revit начинай с get_project_info. Инструменты read_family_file, read_family_type_catalog и preview_build_family работают с файлами независимо от активного проекта; запись нового RFA требует apply_build_family. validate_family_file использует только скрытые временные документы. Каждая запись требует соответствующего preview, затем apply: Если revit_ping сообщает autoConfirm=true, apply выполняется без окна; иначе Revit запрашивает подтверждение с отказом по умолчанию. Старые планы недействительны после изменения документа или через 10 минут. Новые инструменты выполняют пробную транзакцию с откатом; ID созданных в preview объектов временные. При удалении зависимостей нужно явно передать allowDependentDeletion=true после просмотра списка. Для точных размеров и координат читай свойства, геометрию, типы и опоры: название типа не гарантирует его толщину. Не исполняй произвольный C#.'
 });
 
 function register(name, description, inputSchema, annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false }) {
@@ -199,6 +200,7 @@ registerAuthoringTools(register);
 registerSheetTools(register);
 registerRoofTools(register);
 registerMepTools(register);
+registerFamilyTools(register);
 registerStructureTools(register);
 
 function registerLocal(name, description, inputSchema, handler, annotations = { readOnlyHint: false, destructiveHint: false, openWorldHint: false }) {

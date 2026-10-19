@@ -39,6 +39,8 @@ jobs:
         run: node --test installer/source.test.mjs installer/runtime.test.mjs
       - name: Test approval settings
         run: dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj -c Release
+      - name: Test family catalogs
+        run: dotnet run --project tests/FamilyCatalog.Tests/FamilyCatalog.Tests.csproj -c Release
       - name: Test hot update and rollback
         shell: pwsh
         run: ./tests/updates.ps1

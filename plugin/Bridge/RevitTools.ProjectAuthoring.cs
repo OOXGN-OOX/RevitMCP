@@ -52,6 +52,8 @@ internal static partial class RevitTools
 
     private static object PreviewLoadFamily(UIApplication app, JsonElement args)
     {
+        if (FString(args, "parameterPolicy") is not ("rejectExisting" or "preserve" or "overwrite") || FString(args, "sharedFamilySource") is not ("project" or "file"))
+            throw new ArgumentException("Specify parameterPolicy (rejectExisting/preserve/overwrite) and sharedFamilySource (project/file).");
         var path = AuthoringFilePath(args, "path", ".rfa", true);
         var bound = JsonNode.Parse(args.GetRawText())!.AsObject();
         bound["path"] = path;
@@ -65,8 +67,8 @@ internal static partial class RevitTools
         var path = AuthoringFilePath(args, "path", ".rfa", true);
         if (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) != JsonTools.GetString(args, "sha256"))
             throw new InvalidOperationException("The family file changed after preview.");
-        if (!document.LoadFamily(path, out var family) || family is null)
-            throw new InvalidOperationException("Revit could not load this family, or it already exists. Use list_family_types to inspect the project.");
+        if (!document.LoadFamily(path, new FamilyLoadPolicy(FString(args, "parameterPolicy"), FString(args, "sharedFamilySource")), out var family) || family is null)
+            throw new InvalidOperationException("Revit could not load this family, it is unchanged, or replacement was rejected by parameterPolicy.");
         return new { familyId = family.Id.Value, family = family.Name, sourcePath = path,
             types = family.GetFamilySymbolIds().Select(id => new { id = id.Value, name = document.GetElement(id).Name }).ToArray() };
     }

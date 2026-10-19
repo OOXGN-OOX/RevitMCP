@@ -24,6 +24,7 @@ internal static partial class RevitTools
     {
         Plans.Clear();
         OperationPlans.Clear();
+        FamilyBuildPlans.Clear();
         Revisions.Clear();
         TransactionFailures.Clear();
         LegacyWarnings.Clear();

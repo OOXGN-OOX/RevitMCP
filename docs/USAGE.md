@@ -15,6 +15,7 @@
 | Двери и окна | `preview_place_hosted_families` / `apply_place_hosted_families` |
 | Новые типоразмеры | `preview_duplicate_family_types` / `apply_duplicate_family_types` |
 | MEP-коннекторы | `list_mep_connectors`, `preview_connect_mep` / `apply_connect_mep` |
+| Разработка RFA | `read_family_file`, `read_family_type_catalog`, `preview_build_family` / `apply_build_family`, `validate_family_file` |
 | Загрузка локального RFA | `preview_load_family` / `apply_load_family` |
 | Размеры по опорам | `list_annotation_types`, `get_element_references`, `preview_create_dimensions` / `apply_create_dimensions` |
 | Марки | `preview_tag_walls`, `preview_tag_rooms`, `preview_tag_mep` и соответствующие `apply_*` |
@@ -35,6 +36,8 @@
 По умолчанию `apply_*` запрашивает подтверждение в Revit; отказ выбран по умолчанию. Кнопка **Авто подтверждение** переключает локальную настройку `%LOCALAPPDATA%\RevitMCP\settings.json`: `{"autoConfirm":true}`. Настройка перечитывается перед операцией.
 
 Автоматический режим распространяется на все `apply_*`, включая удаление и SaveAs. Проверки preview, planId, ревизии документа и транзакций продолжают действовать. При удалении зависимых элементов требуется явное `allowDependentDeletion=true`; расхождение с рассчитанным набором вызывает откат.
+
+Разработка семейств из RFA/RFT, каталогов типов, геометрии и HVAC-разъёмов описана в [руководстве по семействам](FAMILIES.md). Эти инструменты работают со скрытыми документами и не требуют активного проекта. Перезагрузка RFA в проект требует явных `parameterPolicy` и `sharedFamilySource`.
 
 ## Ограничения
 

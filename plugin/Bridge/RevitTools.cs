@@ -32,6 +32,12 @@ internal static partial class RevitTools
             }
             object result = request.Tool switch
             {
+                "get_family_authoring_options" => FamilyAuthoringOptions(),
+                "read_family_file" => ReadFamilyFile(application, args),
+                "read_family_type_catalog" => ReadFamilyCatalog(args),
+                "preview_build_family" => PreviewBuildFamily(application, args, isCancelled),
+                "apply_build_family" => ApplyBuildFamily(application, args, isCancelled),
+                "validate_family_file" => ValidateFamilyFile(application, args, isCancelled),
                 "revit_ping" => Ping(application),
                 "get_project_info" => GetProjectInfo(application),
                 "get_current_view_elements" => GetCurrentViewElements(application, args),
