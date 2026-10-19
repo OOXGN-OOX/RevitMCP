@@ -37,7 +37,7 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await rpc('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'revit-mcp-tests', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '0.0.1');
+  assert.equal(initialized.result.serverInfo.version, '0.0.2');
   assert.equal(initialized.result.serverInfo.name, 'revit-mcp');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const listed = await rpc('tools/list', {});

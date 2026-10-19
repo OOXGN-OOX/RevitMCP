@@ -22,14 +22,6 @@ internal sealed class BridgeResponse
     public static BridgeResponse Failure(string id, string error) => new() { Id = id, Ok = false, Error = error };
 }
 
-internal sealed class PendingRequest(BridgeRequest request)
-{
-    public BridgeRequest Request { get; } = request;
-    public ManualResetEventSlim Completed { get; } = new(false);
-    public BridgeResponse? Response { get; set; }
-    public volatile bool Cancelled;
-}
-
 internal sealed class ParameterPlan
 {
     public string Id { get; init; } = "";

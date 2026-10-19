@@ -32,8 +32,12 @@ sealed class SetupWindow : Form
             control.Margin = new Padding(0, 0, 0, 14);
             layout.Controls.Add(control);
         }
-        AddRow(new Label { Text = "Revit MCP", Font = new Font(Font.FontFamily, 19, FontStyle.Bold), AutoSize = true });
-        AddRow(new Label { Text = "OOXGN · Версия " + Deployment.Version, AutoSize = true });
+        using var headerStream = typeof(SetupWindow).Assembly.GetManifestResourceStream("RevitMCP.Product.png")!;
+        using var headerImage = Image.FromStream(headerStream);
+        var header = new PictureBox { Image = new Bitmap(headerImage), SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(570, 114), AccessibleName = "Revit MCP · OOXGN" };
+        header.Disposed += (_, _) => header.Image?.Dispose();
+        AddRow(header);
+        AddRow(new Label { Text = "Версия " + Deployment.Version, AutoSize = true });
         AddRow(new Label { AutoSize = true, MaximumSize = new Size(570, 0), Text = uninstall
             ? "Удаление надстройки и её MCP-подключения. Модели, снимки и настройки сохранятся. Закройте Revit и MCP-клиент."
             : "Локальный MCP-мост для Autodesk Revit 2026 x64. Установка для текущего пользователя; Node.js и зависимости включены." });
@@ -61,7 +65,7 @@ sealed class SetupWindow : Form
         codex.Checked = Directory.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex"));
         claude.Checked = Directory.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude"));
         AddRow(codex); AddRow(claude); AddRow(auto);
-        AddRow(new Label { AutoSize = true, MaximumSize = new Size(570, 0), Text = "GNU AGPL v3. Конфигурации для других MCP-клиентов и исходники входят в поставку." });
+
         AddRow(status);
 
         var buttons = new FlowLayoutPanel

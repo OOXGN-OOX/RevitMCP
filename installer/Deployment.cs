@@ -11,7 +11,7 @@ namespace RevitMCP.Setup;
 
 static class Deployment
 {
-    public const string Version = "0.0.1";
+    public const string Version = "0.0.2";
     const string AddinId = "4D213781-9614-4BB6-9B2C-1F102A68B174";
     const string RegistryKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\RevitMCP";
     static readonly string Data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevitMCP");
@@ -80,13 +80,16 @@ static class Deployment
                 File.WriteAllBytes(destination, bytes);
             }
         }
+        var runtimeManifest = JsonNode.Parse(File.ReadAllText(Path.Combine(Release, "runtime", "manifest.json")))!;
+        var pointer = new JsonObject { ["relativePath"] = "versions/" + Version + "/runtime", ["manifest"] = runtimeManifest };
+        AtomicWithBackup(Path.Combine(App, "active.json"), pointer.ToJsonString());
         RunNode(Release, "--examples");
         var clients = new List<string>();
         if (codex) clients.Add("--codex"); if (claude) clients.Add("--claude");
         if (clients.Count != 0) RunNode(Release, clients.ToArray());
 
-        var assembly = SecurityElement.Escape(Path.Combine(Release, "plugin", "RevitMCP.dll"));
-        var xml = $"<?xml version=\"1.0\" encoding=\"utf-8\"?><RevitAddIns><AddIn Type=\"Application\"><Name>Revit MCP</Name><Assembly>{assembly}</Assembly><AddInId>{AddinId}</AddInId><FullClassName>RevitMCP.PluginApplication</FullClassName><VendorId>OOXG</VendorId><VendorDescription>OOXGN — Revit MCP local bridge</VendorDescription></AddIn></RevitAddIns>";
+        var assembly = SecurityElement.Escape(Path.Combine(Release, "loader", "RevitMCP.Loader.dll"));
+        var xml = $"<?xml version=\"1.0\" encoding=\"utf-8\"?><RevitAddIns><AddIn Type=\"Application\"><Name>Revit MCP</Name><Assembly>{assembly}</Assembly><AddInId>{AddinId}</AddInId><FullClassName>RevitMCP.Loader.PluginApplication</FullClassName><VendorId>OOXG</VendorId><VendorDescription>OOXGN</VendorDescription></AddIn></RevitAddIns>";
         AtomicWithBackup(Manifest, xml);
         if (auto)
         {

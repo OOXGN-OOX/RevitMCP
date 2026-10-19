@@ -39,8 +39,10 @@ await cp(path.join(repo, 'installer', 'configure-mcp.mjs'), path.join(stage, 'co
 await cp(path.join(repo, 'LICENSE'), path.join(stage, 'LICENSE'));
 await cp(path.join(repo, 'NOTICE.md'), path.join(stage, 'NOTICE.md'));
 await cp(path.join(repo, 'installer', 'INSTALLATION.md'), path.join(stage, 'INSTALLATION.md'));
-await mkdir(path.join(stage, 'plugin'), { recursive: true });
-await cp(path.join(repo, 'plugin', 'bin', 'Release', 'net8.0-windows', 'RevitMCP.dll'), path.join(stage, 'plugin', 'RevitMCP.dll'));
+await mkdir(path.join(stage, 'loader'), { recursive: true });
+for (const file of ['RevitMCP.Loader.dll', 'RevitMCP.Updates.dll', 'RevitMCP.Contracts.dll'])
+  await cp(path.join(repo, 'loader/bin/Release/net8.0-windows', file), path.join(stage, 'loader', file));
+await cp(path.join(repo, 'install.ps1'), path.join(stage, 'install.ps1'));
 async function verify(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) throw new Error('Payload must not contain symlinks');

@@ -6,7 +6,7 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <Company>OOXGN</Company>
     <Product>Revit MCP</Product>
     <Title>Revit MCP Setup</Title>
@@ -17,9 +17,11 @@
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <ApplicationIcon>../assets/revit-mcp.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../assets/product-lockup.png" LogicalName="RevitMCP.Product.png" />
     <EmbeddedResource Include="$(PayloadPath)" LogicalName="RevitMCP.Payload.zip" />
   </ItemGroup>
 </Project>

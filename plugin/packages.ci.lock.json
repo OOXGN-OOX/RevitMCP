@@ -13,6 +13,9 @@
         "requested": "[2026.0.4, )",
         "resolved": "2026.0.4",
         "contentHash": "jcDgCWWyAHSwEYjbEzYO2J5PiopS6sGfuZwpX3mdbn+G998xj036h3JmPUlrLNW8sfIX9dlSn0aIWfoagXDxnw=="
+      },
+      "revitmcp.contracts": {
+        "type": "Project"
       }
     }
   }

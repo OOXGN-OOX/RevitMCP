@@ -1,8 +1,6 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -80,7 +78,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: RevitMCP-${{ needs.plan.outputs.version }}
-          path: dist/*
+          path: |
+            dist/RevitMCP-${{ needs.plan.outputs.version }}-Setup.exe
+            dist/RevitMCP-${{ needs.plan.outputs.version }}-source.zip
+            dist/SHA256SUMS.txt
           if-no-files-found: error
       - name: Publish complete release
         shell: pwsh
@@ -96,7 +97,7 @@ jobs:
             gh release create $env:TAG_NAME --target $env:GITHUB_SHA --draft --title "Revit MCP $env:VERSION" --notes-file "docs/releases/$env:VERSION.md"
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft.' }
           }
-          $assets = (Get-ChildItem dist -File).FullName
+          $assets = @("dist/RevitMCP-$env:VERSION-Setup.exe", "dist/RevitMCP-$env:VERSION-source.zip", "dist/SHA256SUMS.txt")
           gh release upload $env:TAG_NAME @assets --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
           gh release edit $env:TAG_NAME --draft=false --latest

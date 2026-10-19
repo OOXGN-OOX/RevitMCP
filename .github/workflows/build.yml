@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: windows-latest
@@ -25,7 +29,7 @@ jobs:
         run: npm install --global pnpm@11.25.0 --ignore-scripts
       - name: Install locked dependencies
         run: pnpm --dir server install --frozen-lockfile
-      - name: Check release identity
+      - name: Check package contracts
         run: node installer/check-release.mjs
       - name: Test MCP server
         run: pnpm --dir server test
@@ -33,16 +37,59 @@ jobs:
         run: node --test installer/configure-mcp.test.mjs
       - name: Test approval settings
         run: dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj -c Release
-      - name: Build Revit DLL without installed Revit
+      - name: Test hot update and rollback
+        shell: pwsh
+        run: ./tests/updates.ps1
+      - name: Check window layouts
+        run: |
+          dotnet run --project tests/UpdateWindow.Checks -c Release -- tests/UpdateWindow.Checks/obj/rendered
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/SetupWindow.Checks -c Release -- tests/SetupWindow.Checks/obj/rendered
+      - name: Build Revit assemblies
         shell: pwsh
         run: ./build.ps1 -UseRevitNuGet
       - name: Reject redistributed Autodesk assemblies
         shell: pwsh
         run: |
-          $files = Get-ChildItem plugin/bin/Release -Recurse -File
+          $files = Get-ChildItem plugin/bin/Release,loader/bin/Release -Recurse -File
           if ($files.Name -match '^RevitAPI(UI)?\.dll$') { throw 'Autodesk runtime assemblies must not be redistributed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: RevitMCP-DLL-${{ github.sha }}
-          path: plugin/bin/Release/net8.0-windows/RevitMCP.dll
+          path: |
+            plugin/bin/Release/net8.0-windows/RevitMCP.Core.dll
+            loader/bin/Release/net8.0-windows/RevitMCP.*.dll
           if-no-files-found: error
+      - name: Build test installer and update package
+        if: github.ref == 'refs/heads/0.0.2' && github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          ./build-installer.ps1 -UseRevitNuGet -SkipPluginBuild
+          ./build-update.ps1 -BuildId $env:GITHUB_SHA -Sequence $env:GITHUB_RUN_NUMBER
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/0.0.2' && github.event_name != 'pull_request'
+        with:
+          name: RevitMCP-0.0.2-${{ github.sha }}
+          path: |
+            dist/*.exe
+            dist/*-source.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/0.0.2' && github.event_name != 'pull_request'
+        with:
+          path: dist/site
+
+  update-channel:
+    if: github.ref == 'refs/heads/0.0.2' && github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

@@ -20,6 +20,16 @@ internal static partial class RevitTools
     private static readonly List<string> LegacyWarnings = [];
     private static HashSet<long>? CapturedDeletionIds;
 
+    internal static void ClearRuntimeState()
+    {
+        Plans.Clear();
+        OperationPlans.Clear();
+        Revisions.Clear();
+        TransactionFailures.Clear();
+        LegacyWarnings.Clear();
+        CapturedDeletionIds = null;
+    }
+
     private static void ValidateLegacyPlan(ParameterPlan plan, Document document)
     {
         GetPlan(plan.Id, plan.Kind);

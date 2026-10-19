@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.0.2</Version>
+    <Company>OOXGN</Company>
+    <Product>Revit MCP</Product>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../contracts/RevitMCP.Contracts.csproj" /></ItemGroup>
+</Project>

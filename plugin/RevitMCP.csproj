@@ -4,15 +4,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <AssemblyName>RevitMCP</AssemblyName>
+    <AssemblyName>RevitMCP.Core</AssemblyName>
     <RootNamespace>RevitMCP</RootNamespace>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <Company>OOXGN</Company>
     <Product>Revit MCP</Product>
     <Title>Revit MCP</Title>
     <Copyright>Original work: Davud77. Modifications: Copyright 2026 OOXGN. AGPL-3.0-only.</Copyright>
     <RepositoryUrl>https://github.com/OOXGN-OOX/RevitMCP</RepositoryUrl>
-    <AssemblyVersion>0.0.1.0</AssemblyVersion>
+    <AssemblyVersion>0.0.2.0</AssemblyVersion>
     <Revit2026Dir Condition="'$(Revit2026Dir)' == ''">C:\Program Files\Autodesk\Revit 2026</Revit2026Dir>
     <UseRevitNuGet Condition="'$(UseRevitNuGet)' == '' And !Exists('$(Revit2026Dir)\RevitAPI.dll')">true</UseRevitNuGet>
     <RestorePackagesWithLockFile Condition="'$(UseRevitNuGet)' == 'true'">true</RestorePackagesWithLockFile>
@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Assets\ooxgn-monogram.svg" />
+    <ProjectReference Include="../contracts/RevitMCP.Contracts.csproj" />
     <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2026.0.4" PrivateAssets="all" IncludeAssets="compile" Condition="'$(UseRevitNuGet)' == 'true'" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" IncludeAssets="compile" Condition="'$(UseRevitNuGet)' == 'true'" />

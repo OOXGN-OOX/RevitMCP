@@ -146,7 +146,7 @@ internal static partial class RevitTools
             revitVersion = app.Application.VersionNumber,
             activeDocumentOpen = document is not null,
             projectName = document?.Title,
-            bridgePort = BridgeService.Port
+            bridgePort = 37652
         };
     }
 

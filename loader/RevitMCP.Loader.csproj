@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.0.2</Version>
+    <Company>OOXGN</Company>
+    <Product>Revit MCP</Product>
+    <Title>Revit MCP</Title>
+    <Revit2026Dir Condition="'$(Revit2026Dir)' == ''">C:\Program Files\Autodesk\Revit 2026</Revit2026Dir>
+    <UseRevitNuGet Condition="'$(UseRevitNuGet)' == '' And !Exists('$(Revit2026Dir)\RevitAPI.dll')">true</UseRevitNuGet>
+    <RestorePackagesWithLockFile Condition="'$(UseRevitNuGet)' == 'true'">true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(UseRevitNuGet)' == 'true'">packages.ci.lock.json</NuGetLockFilePath>
+    <RestoreLockedMode Condition="'$(UseRevitNuGet)' == 'true' And '$(CI)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../updates/RevitMCP.Updates.csproj" />
+    <Compile Include="../plugin/ApprovalSettings.cs" Link="ApprovalSettings.cs" />
+    <EmbeddedResource Include="../assets/icons/*.png" Link="Assets/%(Filename)%(Extension)" LogicalName="RevitMCP.Loader.Assets.%(Filename)%(Extension)" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2026.0.4" PrivateAssets="all" IncludeAssets="compile" Condition="'$(UseRevitNuGet)' == 'true'" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2026.0.4" PrivateAssets="all" IncludeAssets="compile" Condition="'$(UseRevitNuGet)' == 'true'" />
+    <Reference Include="RevitAPI" Condition="'$(UseRevitNuGet)' != 'true'"><HintPath>$(Revit2026Dir)\RevitAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="RevitAPIUI" Condition="'$(UseRevitNuGet)' != 'true'"><HintPath>$(Revit2026Dir)\RevitAPIUI.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

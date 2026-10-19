@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { editCodex, editClaude } from './configure-mcp.mjs';
 
-const root = path.resolve('C:/Users/Test User/Данные/RevitMCP/Application/versions/0.0.1');
+const root = path.resolve('C:/Users/Test User/Данные/RevitMCP/Application/versions/0.0.2');
 test('Codex preserves unrelated tables and own preferences; rewrites multiline args', () => {
   const original = '# keep\r\nmodel = "x"\r\n[mcp_servers.revit_mcp]\r\ncommand = "node"\r\nargs = [\r\n "old.js", # legacy\r\n]\r\ntool_timeout_sec = 400\r\nenabled = false\r\n[mcp_servers.other]\r\ncommand = "other"\r\n';
   const edited = editCodex(original, root);

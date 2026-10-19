@@ -1,59 +1,21 @@
-param([switch]$EnableAutoConfirm)
+param([string]$PackageDirectory = $PSScriptRoot, [switch]$Codex, [switch]$Claude)
 $ErrorActionPreference = 'Stop'
-$assembly = Join-Path $PSScriptRoot 'plugin\bin\Release\net8.0-windows\RevitMCP.dll'
-$projectFile = Join-Path $PSScriptRoot 'plugin\RevitMCP.csproj'
-$manifestName = 'RevitMCP.addin'
-$addinsDirectory = Join-Path $env:APPDATA 'Autodesk\Revit\Addins\2026'
-$pluginDirectory = Join-Path $addinsDirectory 'RevitMCP'
-$project = [xml](Get-Content -LiteralPath $projectFile -Raw)
-$version = $project.Project.PropertyGroup.Version
-if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Некорректная версия надстройки в $($projectFile): '$version'." }
-$versionDirectory = Join-Path $pluginDirectory "versions\$version"
-$installedAssembly = Join-Path $versionDirectory 'RevitMCP.dll'
-$manifestPath = Join-Path $addinsDirectory $manifestName
-
-if (-not (Test-Path $assembly)) {
-    throw "Не найден $assembly. Сначала выполните .\build.ps1."
-}
-
-$revitRunning = [bool](Get-Process -Name Revit -ErrorAction SilentlyContinue)
-if ($revitRunning -and (Test-Path -LiteralPath $installedAssembly)) {
-    throw "Revit запущен, а сборка версии $version уже установлена. Закройте Revit перед повторной установкой этой версии."
-}
-
-New-Item -ItemType Directory -Force -Path $versionDirectory | Out-Null
-Copy-Item -LiteralPath $assembly -Destination $installedAssembly -Force
-
-$assemblyPath = [System.Security.SecurityElement]::Escape($installedAssembly)
-$manifest = @"
-<?xml version="1.0" encoding="utf-8" standalone="no"?>
-<RevitAddIns>
-  <AddIn Type="Application">
-    <Name>Revit MCP</Name>
-    <Assembly>$assemblyPath</Assembly>
-    <AddInId>4D213781-9614-4BB6-9B2C-1F102A68B174</AddInId>
-    <FullClassName>RevitMCP.PluginApplication</FullClassName>
-    <VendorId>OOXG</VendorId>
-    <VendorDescription>OOXGN — Revit MCP local bridge</VendorDescription>
-  </AddIn>
-</RevitAddIns>
-"@
-
-New-Item -ItemType Directory -Force -Path $addinsDirectory | Out-Null
-Set-Content -LiteralPath $manifestPath -Value $manifest -Encoding UTF8
-if ($EnableAutoConfirm) {
-    $settingsDirectory = Join-Path $env:LOCALAPPDATA 'RevitMCP'
-    $settingsPath = Join-Path $settingsDirectory 'settings.json'
-    New-Item -ItemType Directory -Force -Path $settingsDirectory | Out-Null
-    $settings = if (Test-Path -LiteralPath $settingsPath) {
-        Get-Content -Raw -LiteralPath $settingsPath | ConvertFrom-Json
-    } else { [pscustomobject]@{} }
-    $settings | Add-Member -NotePropertyName autoConfirm -NotePropertyValue $true -Force
-    [IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 20))
-    Write-Host 'Автоподтверждение команд apply включено в локальных настройках.'
-}
-if ($revitRunning) {
-    Write-Warning "Версия $version подготовлена для следующего запуска; уже открытый Revit продолжит работу с загруженным состоянием."
-} else {
-    Write-Host "Версия $version установлена. Запустите Revit 2026 и разрешите загрузку надстройки, если появится запрос."
-}
+if (Get-Process Revit -ErrorAction SilentlyContinue) { throw 'Для первой установки загрузчика закройте Revit. Последующие обновления доступны внутри плагина.' }
+$version = (Get-Content -LiteralPath (Join-Path $PackageDirectory 'release.json') -Raw | ConvertFrom-Json).version
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid package version.' }
+$app = Join-Path $env:LOCALAPPDATA 'RevitMCP/Application'
+$release = Join-Path $app "versions/$version"
+$addin = Join-Path $env:APPDATA 'Autodesk/Revit/Addins/2026/RevitMCP.addin'
+New-Item -ItemType Directory -Force -Path $release,(Split-Path $addin) | Out-Null
+Get-ChildItem -LiteralPath $PackageDirectory | Where-Object Name -ne 'install.ps1' | Copy-Item -Destination $release -Recurse -Force
+$manifest = Get-Content -LiteralPath (Join-Path $release 'runtime/manifest.json') -Raw | ConvertFrom-Json
+@{relativePath="versions/$version/runtime";manifest=$manifest} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $app 'active.json') -Encoding utf8NoBOM
+$assembly = [Security.SecurityElement]::Escape((Join-Path $release 'loader/RevitMCP.Loader.dll'))
+$xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?><RevitAddIns><AddIn Type=`"Application`"><Name>Revit MCP</Name><Assembly>$assembly</Assembly><AddInId>4D213781-9614-4BB6-9B2C-1F102A68B174</AddInId><FullClassName>RevitMCP.Loader.PluginApplication</FullClassName><VendorId>OOXG</VendorId><VendorDescription>OOXGN</VendorDescription></AddIn></RevitAddIns>"
+if (Test-Path -LiteralPath $addin) { Copy-Item -LiteralPath $addin -Destination ($addin + '.' + [guid]::NewGuid().ToString('N') + '.bak') }
+[IO.File]::WriteAllText($addin, $xml, [Text.UTF8Encoding]::new($false))
+$clients = @('--examples')
+if ($Codex) { $clients += '--codex' }; if ($Claude) { $clients += '--claude' }
+& (Join-Path $release 'node/node.exe') (Join-Path $release 'configure-mcp.mjs') @clients
+if ($LASTEXITCODE -ne 0) { throw 'MCP configuration failed.' }
+Write-Host 'Revit MCP установлен. Запустите Revit 2026 и перезапустите MCP-клиент.'
