@@ -1,0 +1,48 @@
+name: Build and test
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Install pnpm
+        run: npm install --global pnpm@11.25.0 --ignore-scripts
+      - name: Install locked dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      - name: Check release identity
+        run: node installer/check-release.mjs
+      - name: Test MCP server
+        run: pnpm --dir server test
+      - name: Test client configuration
+        run: node --test installer/configure-mcp.test.mjs
+      - name: Test approval settings
+        run: dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj -c Release
+      - name: Build Revit DLL without installed Revit
+        shell: pwsh
+        run: ./build.ps1 -UseRevitNuGet
+      - name: Reject redistributed Autodesk assemblies
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem plugin/bin/Release -Recurse -File
+          if ($files.Name -match '^RevitAPI(UI)?\.dll$') { throw 'Autodesk runtime assemblies must not be redistributed.' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RevitMCP-DLL-${{ github.sha }}
+          path: plugin/bin/Release/net8.0-windows/RevitMCP.dll
+          if-no-files-found: error

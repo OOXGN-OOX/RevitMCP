@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: windows-latest
+    outputs:
+      required: ${{ steps.plan.outputs.required }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Plan release
+        id: plan
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Releases are built from main.' }
+          $version = (Get-Content server/package.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version.' }
+          $tag = "v$version"
+          if (!(Test-Path "docs/releases/$version.md")) { throw 'Versioned release notes are missing.' }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          $existing = $null
+          try { $existing = Invoke-RestMethod "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" -Headers $headers }
+          catch { if ([int]$_.Exception.Response.StatusCode -ne 404) { throw } }
+          $required = !$existing -or $existing.draft
+          "required=$($required.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          if (!$required) { Write-Host "$tag is already published; only verification is needed." }
+
+  verify:
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: [plan, verify]
+    if: needs.plan.outputs.required == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+      - name: Install pnpm
+        run: npm install --global pnpm@11.25.0 --ignore-scripts
+      - name: Install locked dependencies
+        run: pnpm --dir server install --frozen-lockfile
+      - name: Validate release target
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ needs.plan.outputs.tag }}
+        run: |
+          $existing = git tag --list $env:TAG_NAME
+          if ($existing -and (git rev-list -n 1 $env:TAG_NAME) -ne $env:GITHUB_SHA) {
+            throw 'Version tag points to different sources. Use a new version.'
+          }
+      - name: Build installer and corresponding sources
+        shell: pwsh
+        run: ./build-installer.ps1 -UseRevitNuGet
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RevitMCP-${{ needs.plan.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish complete release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          $existing = gh release view $env:TAG_NAME --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if (!(($existing | ConvertFrom-Json).isDraft)) { throw 'Published versions must not be overwritten.' }
+          } else {
+            gh release create $env:TAG_NAME --target $env:GITHUB_SHA --draft --title "Revit MCP $env:VERSION" --notes-file "docs/releases/$env:VERSION.md"
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft.' }
+          }
+          $assets = (Get-ChildItem dist -File).FullName
+          gh release upload $env:TAG_NAME @assets --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
+          gh release edit $env:TAG_NAME --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed; draft is available for recovery.' }
