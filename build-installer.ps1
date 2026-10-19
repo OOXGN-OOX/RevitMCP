@@ -5,6 +5,9 @@ $project = [xml](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'plugin\Revit
 $version = [string]$project.Project.PropertyGroup.Version
 node (Join-Path $PSScriptRoot 'installer\check-release.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Release identity or version mismatch.' }
+$sourceArchive = Join-Path $OutputDirectory "RevitMCP-$version-source.zip"
+$commit = node (Join-Path $PSScriptRoot 'installer/source.mjs') $PSScriptRoot $sourceArchive
+if ($LASTEXITCODE -ne 0) { throw 'Source archive creation failed.' }
 if (!$SkipPluginBuild) { & (Join-Path $PSScriptRoot 'build.ps1') -UseRevitNuGet:$UseRevitNuGet }
 if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'server\node_modules\zod'))) {
     Push-Location (Join-Path $PSScriptRoot 'server')
@@ -13,30 +16,14 @@ if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'server\node_modules\z
 }
 $stageRoot = Join-Path $PSScriptRoot ('installer\obj\package-' + [guid]::NewGuid().ToString('N'))
 $payload = Join-Path $stageRoot 'payload'
-$source = Join-Path $stageRoot 'source'
-New-Item -ItemType Directory -Force -Path $payload,$source,$OutputDirectory | Out-Null
+New-Item -ItemType Directory -Force -Path $payload,$OutputDirectory | Out-Null
 node (Join-Path $PSScriptRoot 'installer\package.mjs') $PSScriptRoot $payload
 if ($LASTEXITCODE -ne 0) { throw 'Packaging failed.' }
-$commit = (git -C $PSScriptRoot rev-parse HEAD).Trim()
 $sequence = if ($env:GITHUB_RUN_NUMBER) { $env:GITHUB_RUN_NUMBER } else { '0' }
 node (Join-Path $PSScriptRoot 'installer/runtime.mjs') $PSScriptRoot (Join-Path $payload 'runtime') $commit $sequence
 if ($LASTEXITCODE -ne 0) { throw 'Runtime packaging failed.' }
 node (Join-Path $PSScriptRoot 'installer\smoke.mjs') (Join-Path $payload 'node\node.exe') (Join-Path $payload 'server\src\index.js')
 if ($LASTEXITCODE -ne 0) { throw 'Packaged MCP smoke check failed.' }
-# Use Git's tracked + nonignored files; never include runtime caches or private models.
-Push-Location $PSScriptRoot
-try { $sourceFiles = @(git -c core.quotepath=false ls-files --cached --others --exclude-standard) }
-finally { Pop-Location }
-foreach ($relative in $sourceFiles) {
-    if ($relative -match '(^|[\\/])(bin|obj|node_modules|dist|artifacts|work|\.agents|\.git)([\\/]|$)' -or $relative -match '\.(rvt|rfa|rte|rft|token|zip|exe|pdb)$') { continue }
-    $inputFile = Join-Path $PSScriptRoot $relative
-    if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { continue }
-    $destination = Join-Path $source $relative
-    New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
-    Copy-Item -LiteralPath $inputFile -Destination $destination
-}
-$sourceArchive = Join-Path $OutputDirectory "RevitMCP-$version-source.zip"
-Compress-Archive -Path (Join-Path $source '*') -DestinationPath $sourceArchive -Force
 New-Item -ItemType Directory -Path (Join-Path $payload 'source') -Force | Out-Null
 Copy-Item -LiteralPath $sourceArchive -Destination (Join-Path $payload 'source')
 $payloadArchive = Join-Path $stageRoot 'payload.zip'

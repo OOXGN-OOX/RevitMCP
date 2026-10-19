@@ -8,6 +8,7 @@
 pnpm --dir server install --frozen-lockfile
 pnpm --dir server test
 node --test installer/configure-mcp.test.mjs
+node --test installer/source.test.mjs
 node installer/check-release.mjs
 dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj -c Release
 ./tests/updates.ps1
@@ -20,6 +21,8 @@ dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj 
 `build.ps1` собирает `RevitMCP.Core.dll` и `RevitMCP.Loader.dll` с общими сборками Contracts и Updates. Выходные каталоги — `bin/Release/` соответствующих проектов. Сборка не меняет установленную надстройку или конфигурацию MCP.
 
 `build-installer.ps1` создаёт в `dist/` EXE, архив соответствующих исходников и `SHA256SUMS.txt`. EXE содержит Node.js, зависимости MCP, загрузчик, начальную рабочую часть и .NET runtime. Упакованный сервер проверяется через MCP initialize и tools/list. Для получения лицензионных текстов Node.js и .NET нужен интернет.
+
+Перед упаковкой зафиксируйте изменения отслеживаемых файлов. Архив исходников создаётся из коммита `HEAD`; незакоммиченные изменения останавливают упаковку, неотслеживаемые файлы в архив не попадают. Приватные инструкции, журналы, модели Revit и файлы сборки запрещены в архиве, даже если добавлены в Git. `-SkipPluginBuild` используйте только с DLL, собранными из того же коммита.
 
 Тесты обновления загружают две разные DLL в одном процессе, проверяют смену поведения, сборку старого контекста GC, откат, восстановление после запуска, отсутствие блокировки DLL, отмену и отказ при нарушении контрольных сумм, состава архива или совместимости.
 
