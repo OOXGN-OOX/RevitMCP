@@ -74,13 +74,17 @@ jobs:
           }
       - name: Build installer and corresponding sources
         shell: pwsh
-        run: ./build-installer.ps1 -UseRevitNuGet
+        run: |
+          ./build-installer.ps1 -UseRevitNuGet
+          ./build-update.ps1 -BuildId $env:GITHUB_SHA -Sequence $env:GITHUB_RUN_NUMBER -Channel stable
       - uses: actions/upload-artifact@v4
         with:
           name: RevitMCP-${{ needs.plan.outputs.version }}
           path: |
             dist/RevitMCP-${{ needs.plan.outputs.version }}-Setup.exe
             dist/RevitMCP-${{ needs.plan.outputs.version }}-source.zip
+            dist/RevitMCP-${{ github.sha }}-Update.zip
+            dist/update.json
             dist/SHA256SUMS.txt
           if-no-files-found: error
       - name: Publish complete release
@@ -97,7 +101,7 @@ jobs:
             gh release create $env:TAG_NAME --target $env:GITHUB_SHA --draft --title "Revit MCP $env:VERSION" --notes-file "docs/releases/$env:VERSION.md"
             if ($LASTEXITCODE -ne 0) { throw 'Could not create release draft.' }
           }
-          $assets = @("dist/RevitMCP-$env:VERSION-Setup.exe", "dist/RevitMCP-$env:VERSION-source.zip", "dist/SHA256SUMS.txt")
+          $assets = @("dist/RevitMCP-$env:VERSION-Setup.exe", "dist/RevitMCP-$env:VERSION-source.zip", "dist/RevitMCP-$env:GITHUB_SHA-Update.zip", "dist/update.json", "dist/SHA256SUMS.txt")
           gh release upload $env:TAG_NAME @assets --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
           gh release edit $env:TAG_NAME --draft=false --latest

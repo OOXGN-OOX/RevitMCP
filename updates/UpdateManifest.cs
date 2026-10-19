@@ -12,6 +12,8 @@ public sealed record UpdateManifest
     public string MinimumLoaderVersion { get; init; } = "0.0.2";
     public string BuildId { get; init; } = "";
     public long Sequence { get; init; }
+    public string Channel { get; init; } = "legacy";
+    public string SourceBranch { get; init; } = "";
     public Dictionary<string, string> Files { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -21,6 +23,10 @@ public sealed record UpdateManifest
         if (!System.Version.TryParse(Version, out _) || !System.Version.TryParse(MinimumLoaderVersion, out _))
             throw new InvalidDataException("Некорректная версия пакета.");
         if (!Regex.IsMatch(BuildId, "^[a-f0-9]{40}$") || Sequence < 0) throw new InvalidDataException("Некорректный номер сборки.");
+        if (Channel is not ("stable" or "beta" or "legacy")
+            || (Channel == "stable" && SourceBranch != "main")
+            || (Channel == "beta" && (SourceBranch == "main" || !Regex.IsMatch(SourceBranch, "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$"))))
+            throw new InvalidDataException("Канал обновления не соответствует исходной ветке.");
         if (Files.Count is < 1 or > 128 || !Files.ContainsKey("core/RevitMCP.Core.dll")) throw new InvalidDataException("Неполный пакет обновления.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, digest) in Files)

@@ -11,6 +11,7 @@ public sealed class ModuleManager(string applicationRoot, Version loaderVersion)
     ModuleHandle? handle;
     InstalledVersion? current;
     public string Root { get; } = Path.GetFullPath(applicationRoot);
+    public bool IsCompatible(UpdateManifest manifest) => Version.Parse(manifest.MinimumLoaderVersion) <= loaderVersion;
     public InstalledVersion? Current { get { lock (sync) return current; } }
     public string? ActiveDirectory { get { lock (sync) return current is null ? null : SafePath.Child(Root, current.RelativePath); } }
     public bool CanRollback => File.Exists(Path.Combine(Root, "previous.json"));
@@ -32,7 +33,12 @@ public sealed class ModuleManager(string applicationRoot, Version loaderVersion)
         {
             if (current is null) return true;
             var order = Version.Parse(next.Version).CompareTo(Version.Parse(current.Manifest.Version));
-            return order > 0 || (order == 0 && next.Sequence > current.Manifest.Sequence && next.BuildId != current.Manifest.BuildId);
+            if (next.BuildId == current.Manifest.BuildId && next.Channel == current.Manifest.Channel) return false;
+            if (order != 0) return order > 0;
+            // Stable promotion must not depend on run numbers from a different workflow.
+            if (next.Channel == "stable" && current.Manifest.Channel != "stable") return true;
+            if (next.Channel != "stable" && current.Manifest.Channel == "stable") return false;
+            return next.Sequence > current.Manifest.Sequence;
         }
     }
 

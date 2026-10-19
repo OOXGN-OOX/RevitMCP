@@ -115,6 +115,25 @@ test('MEP contracts require a valid segment and matching size shape', () => {
     assert.equal(parse('preview_create_mep', { segments: [{ ...pipe, ...bad }] }), false);
 });
 
+test('MEP connections require explicit fitting and distinct valid connector owners', () => {
+  const pair = { first: { elementId: 10, connectorId: 0 }, second: { elementId: 20, connectorId: 1 }, fitting: 'direct' };
+  for (const fitting of ['direct', 'elbow', 'union', 'transition'])
+    assert.ok(parse('preview_connect_mep', { ...pair, fitting }));
+  for (const change of [
+    { fitting: undefined }, { fitting: 'auto' }, { second: { elementId: 10, connectorId: 1 } },
+    { first: { elementId: -1, connectorId: 0 } }, { first: { elementId: 10, connectorId: -1 } },
+    { first: { elementId: 10, connectorId: 0.5 } }, { first: { elementId: 10, connectorId: 2147483648 } },
+    { first: { elementId: 10, connectorId: 0, origin: [0, 0, 0] } }
+  ]) assert.equal(parse('preview_connect_mep', { ...pair, ...change }), false);
+  assert.ok(parse('list_mep_connectors', { elementIds: [10, 20], unusedOnly: true }));
+  for (const elementIds of [[], [10, 10], [0], Array.from({ length: 51 }, (_, i) => i + 1)])
+    assert.equal(parse('list_mep_connectors', { elementIds }), false);
+  assert.equal(parse('apply_connect_mep', pair), false);
+  assert.equal(parse('apply_connect_mep', { planId: '' }), false);
+  assert.ok(parse('apply_connect_mep', { planId: 'preview-plan' }));
+  assert.equal(contracts.get('apply_connect_mep').annotations.readOnlyHint, false);
+});
+
 test('beam system and phase contracts reject invalid layouts and duplicate views', () => {
   const system = { levelId: 1, beamTypeId: 2, minX: 0, maxX: 10, minY: 0, maxY: 8,
     beamDirection: 'x', spacingMeters: 0.6 };

@@ -8,7 +8,7 @@
 pnpm --dir server install --frozen-lockfile
 pnpm --dir server test
 node --test installer/configure-mcp.test.mjs
-node --test installer/source.test.mjs
+node --test installer/source.test.mjs installer/runtime.test.mjs
 node installer/check-release.mjs
 dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj -c Release
 ./tests/updates.ps1
@@ -28,12 +28,16 @@ dotnet run --project tests/ApprovalSettings.Tests/ApprovalSettings.Tests.csproj 
 
 ## GitHub Actions
 
-`build.yml` выполняет тесты и сборку на Windows. Ветка `0.0.2` также получает установщик и пакет обновления. Пакет и манифест канала публикуются на GitHub Pages после успешной проверки. Установщик и исходники доступны в артефакте запуска; GitHub Release не создаётся.
+`build.yml` выполняет тесты и сборку на Windows. Ветка `0.0.2` также получает установщик и пакет обновления. Пакет и манифест бета-канала публикуются на GitHub Pages после успешной проверки. Установщик и исходники доступны в артефакте запуска; GitHub Release не создаётся.
 
 ```powershell
-./build-update.ps1 -BuildId (git rev-parse HEAD) -Sequence 1
+./build-update.ps1 -BuildId (git rev-parse HEAD) -Sequence 1 -Channel beta
 ```
 
-Команда формирует `dist/site/updates/0.0.2/`. BuildId — SHA коммита, Sequence — номер запуска GitHub Actions. Повторный запуск того же коммита не заменяет установленный пакет.
+Команда формирует `dist/site/updates/beta/`. BuildId — SHA коммита, Sequence — номер запуска GitHub Actions. Повторный запуск того же коммита не заменяет установленный пакет. Манифест включает канал, исходную ветку и минимальную версию загрузчика. Пакет beta нельзя создать из `main`, стабильный пакет — из ветки разработки.
+
+Стабильный канал использует `update.json` последнего опубликованного GitHub Release. Workflow `release.yml` собирает его из `main` с `-Channel stable` и прикладывает пакет обновления вместе с установщиком, исходниками и контрольными суммами. GitHub Pages используется только для beta; публикация beta не заменяет стабильный канал. Для перехода с beta на стабильную сборку той же версии номера запусков разных workflow не сравниваются. Выключение beta само по себе не понижает установленную версию.
+
+Загрузчик с AssemblyVersion `0.0.2.1` поддерживает выбор канала и этапы прогресса. Новые пакеты требуют эту версию; предыдущий загрузчик обновляется полным установщиком при закрытом Revit. При изменении схем MCP также требуется установить сервер из того же пакета и перезапустить MCP-клиент.
 
 Для интеграционной проверки используйте копию проекта Revit: загрузка, preview/apply, обновление на следующую сборку при открытом документе, повторный предпросмотр и откат. Дополнительно проверьте светлую и тёмную темы, масштабирование 100% и 150%, отсутствие активной транзакции при переключении. Автоматические тесты не заменяют проверку в Revit.

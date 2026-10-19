@@ -14,7 +14,7 @@ internal static class CoreHost
     public static void Initialize()
     {
         Dispatcher = new ApiDispatcher();
-        Modules = new ModuleManager(ApplicationRoot, new Version(0, 0, 2));
+        Modules = new ModuleManager(ApplicationRoot, typeof(CoreHost).Assembly.GetName().Version!);
         try { Modules.LoadActive(); }
         catch (Exception ex) { Log(ex.Message); }
     }
