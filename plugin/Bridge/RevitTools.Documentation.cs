@@ -204,7 +204,7 @@ internal static partial class RevitTools
         xAxis = DocVector(box.Transform.BasisX), yAxis = DocVector(box.Transform.BasisY), zAxis = DocVector(box.Transform.BasisZ) };
     private static object? DocBounds(Element element, View view) => DocBox(element.get_BoundingBox(view));
 
-    private static object DocSchedule(Document doc, ViewSchedule schedule)
+    private static object DocSchedule(Document doc, ViewSchedule schedule, bool includeRows = true)
     {
         var d = schedule.Definition;
         var fields = d.GetFieldOrder().Select(id => {
@@ -216,8 +216,8 @@ internal static partial class RevitTools
         using var table = schedule.GetTableData();
         using var body = table.GetSectionData(SectionType.Body);
         var cells = new List<string[]>();
-        var truncated = (long)body.NumberOfRows * body.NumberOfColumns > 50000;
-        if (!truncated) for (var r = body.FirstRowNumber; r <= body.LastRowNumber; r++)
+        var truncated = includeRows && (long)body.NumberOfRows * body.NumberOfColumns > 50000;
+        if (includeRows && !truncated) for (var r = body.FirstRowNumber; r <= body.LastRowNumber; r++)
             cells.Add(Enumerable.Range(body.FirstColumnNumber, body.NumberOfColumns).Select(c => schedule.GetCellText(SectionType.Body, r, c)).ToArray());
         return new { categoryId = d.CategoryId.Value, d.IsItemized, d.ShowGrandTotal, d.ShowHeaders, d.ShowTitle,
             fields, sortGroups = d.GetSortGroupFields().Select(s => new { fieldId = s.FieldId.IntegerValue,
@@ -225,6 +225,6 @@ internal static partial class RevitTools
             filters = d.GetFilters().Select(f => new { fieldId = f.FieldId.IntegerValue, kind = f.FilterType.ToString(),
                 value = f.IsStringValue ? (object)f.GetStringValue() : f.IsDoubleValue ? f.GetDoubleValue()
                     : f.IsIntegerValue ? f.GetIntegerValue() : f.IsElementIdValue ? f.GetElementIdValue().Value : null }).ToArray(),
-            rows = body.NumberOfRows, columns = body.NumberOfColumns, truncated, cells };
+            rows = body.NumberOfRows, columns = body.NumberOfColumns, truncated, rowsIncluded = includeRows && !truncated, cells };
     }
 }

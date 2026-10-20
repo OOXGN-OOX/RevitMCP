@@ -38,7 +38,7 @@ internal static partial class RevitTools
                 "list_views" => ListViews(application, args),
                 "list_sheet_collections" => ListSheetCollections(application, args),
                 "get_room_boundaries" => GetRoomBoundaries(application, args),
-                "get_schedule_definition" => DocSchedule(RequireDocument(application), RequireSchedule(RequireDocument(application), args)),
+                "get_schedule_definition" => DocSchedule(RequireDocument(application), RequireSchedule(RequireDocument(application), args), false),
                 "get_schedulable_fields" => GetSchedulableFields(application, args),
                 "get_fill_and_line_patterns" => GetGraphicsResources(application),
                 "get_annotation_categories" => GetAnnotationCategories(application, args),

@@ -122,13 +122,13 @@ internal static partial class RevitTools
             added.IsHidden = requested.TryGetProperty("hidden",out var hidden) && hidden.GetBoolean();
         }
         doc.Regenerate();
-        return new { scheduleId = schedule.Id.Value, definition = DocSchedule(doc,schedule) };
+        return new { scheduleId = schedule.Id.Value, definition = DocSchedule(doc,schedule,false) };
     }
 
     private static object ModifyModelSchedule(Document doc, JsonElement args)
     {
         var schedule = RequireSchedule(doc,args); var definition = schedule.Definition;
-        var before = JsonSerializer.SerializeToElement(DocSchedule(doc,schedule));
+        var before = JsonSerializer.SerializeToElement(DocSchedule(doc,schedule,false));
         if (args.TryGetProperty("filters",out var filters))
         {
             definition.ClearFilters();
@@ -169,7 +169,7 @@ internal static partial class RevitTools
         if (args.TryGetProperty("isItemized",out var itemized)) definition.IsItemized = itemized.GetBoolean();
         if (args.TryGetProperty("showGrandTotal",out var total)) definition.ShowGrandTotal = total.GetBoolean();
         doc.Regenerate();
-        return new { scheduleId = schedule.Id.Value, before, after = DocSchedule(doc,schedule) };
+        return new { scheduleId = schedule.Id.Value, before, after = DocSchedule(doc,schedule,false) };
     }
 
     private static object EditModelSheet(Document doc, JsonElement args)
