@@ -2,7 +2,8 @@ import { registerFamilyTools } from './family-tools.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
-import { callRevit } from './revit-bridge.js';
+import { callRevit, getRunningInstances } from './revit-bridge.js';
+import { accessMode, isModelWriteTool } from './tool-access.js';
 import { queryStoredData, saveProjectSnapshot, saveRoomSnapshot } from './stored-data.js';
 import { registerHostedTools } from './hosted-tools.js';
 import { registerAnnotationTools } from './annotation-tools.js';
@@ -12,15 +13,19 @@ import { registerSheetTools } from './sheet-tools.js';
 import { registerRoofTools } from './roof-tools.js';
 import { registerMepTools } from './mep-tools.js';
 import { registerStructureTools } from './structure-tools.js';
+import { registerModelTools, parameterFilter } from './model-tools.js';
 
 const server = new McpServer({
   name: 'revit-mcp',
   version: '0.0.2'
 }, {
-  instructions: 'Для работы с открытой моделью Revit начинай с get_project_info. Инструменты read_family_file, read_family_type_catalog и preview_build_family работают с файлами независимо от активного проекта; запись нового RFA требует apply_build_family. validate_family_file использует только скрытые временные документы. Каждая запись требует соответствующего preview, затем apply: Если revit_ping сообщает autoConfirm=true, apply выполняется без окна; иначе Revit запрашивает подтверждение с отказом по умолчанию. Старые планы недействительны после изменения документа или через 10 минут. Новые инструменты выполняют пробную транзакцию с откатом; ID созданных в preview объектов временные. При удалении зависимостей нужно явно передать allowDependentDeletion=true после просмотра списка. Для точных размеров и координат читай свойства, геометрию, типы и опоры: название типа не гарантирует его толщину. Не исполняй произвольный C#.'
+  instructions: 'Для работы с открытой моделью Revit начинай с get_running_revit_instances, затем get_project_info. При нескольких процессах передавай выбранный processId во всех запросах. Инструменты read_family_file, read_family_type_catalog и preview_build_family работают с файлами независимо от активного проекта; запись нового RFA требует apply_build_family. validate_family_file использует только скрытые временные документы. Каждая запись требует соответствующего preview, затем apply: Если revit_ping сообщает autoConfirm=true, apply выполняется без окна; иначе Revit запрашивает подтверждение с отказом по умолчанию. Старые планы недействительны после изменения документа или через 10 минут. Новые инструменты выполняют пробную транзакцию с откатом; ID созданных в preview объектов временные. При удалении зависимостей нужно явно передать allowDependentDeletion=true после просмотра списка. Для точных размеров и координат читай свойства, геометрию, типы и опоры: название типа не гарантирует его толщину. Не исполняй произвольный C#.'
 });
 
+const mode = accessMode();
 function register(name, description, inputSchema, annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false }) {
+  if (mode === 'read' && isModelWriteTool(name)) return;
+  inputSchema = inputSchema.safeExtend({ processId: z.number().int().positive().optional().describe('PID из get_running_revit_instances. Обязателен, когда запущено несколько Revit.') });
   if (['preview_create_dimensions', 'preview_tag_walls', 'preview_tag_rooms', 'preview_element_graphics', 'preview_color_by_parameter'].includes(name))
     annotations = { ...annotations, readOnlyHint: false };
   server.registerTool(name, {
@@ -51,12 +56,15 @@ register('get_current_view_elements', 'Перечислить элементы �
   limit: z.number().int().min(1).max(500).default(200)
 }));
 register('get_selected_elements', 'Прочитать текущий выбор пользователя в Revit.', empty);
-register('search_elements', 'Искать элементы по тексту, идентификатору, категории, классу Revit, семейству, типу и области модели. Можно ограничить поиск активным видом или 3D-объёмом в метрах; явно скрытые в активном виде элементы включаются только при viewScope=activeView и includeHiddenInView=true. Выдача постраничная.', z.object({
+register('search_elements', 'Искать элементы по тексту, ID, категории, классу, семейству, типу, уровню, виду, 3D-области и значениям параметров. parameterFilters объединяются через И; числовые значения без unitId — во внутренних единицах Revit. viewId выбирает конкретный вид. Выдача постраничная со сводкой всего найденного набора.', z.object({
   query: z.string().max(200).default(''),
   category: z.string().max(200).optional(),
   revitClass: z.string().max(200).optional(),
   familyName: z.string().max(200).optional(),
   typeName: z.string().max(200).optional(),
+  levelId: z.number().int().positive().optional(),
+  viewId: z.number().int().positive().optional(),
+  parameterFilters: z.array(parameterFilter).max(20).optional(),
   elementId: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   bounds: z.object({
     minX: z.number().finite().min(-100000).max(100000),
@@ -70,9 +78,9 @@ register('search_elements', 'Искать элементы по тексту, и
   includeHiddenInView: z.boolean().default(false),
   offset: z.number().int().min(0).max(100000).default(0),
   limit: z.number().int().min(1).max(500).default(100)
-}).refine(args => !args.includeHiddenInView || args.viewScope === 'activeView', {
+}).refine(args => !args.includeHiddenInView || args.viewScope === 'activeView' || args.viewId !== undefined, {
   path: ['includeHiddenInView'],
-  message: 'includeHiddenInView доступен только при viewScope=activeView.'
+  message: 'includeHiddenInView требует viewScope=activeView или viewId.'
 }));
 register('get_project_stats', 'Получить общие количества элементов, категорий, видов, листов, уровней и типов.', empty);
 register('list_rooms', 'Перечислить помещения и их площадь, периметр, объём и уровень.', z.object({
@@ -92,7 +100,11 @@ register('list_host_types', 'Перечислить системные типы 
   limit: z.number().int().min(1).max(500).default(200)
 }));
 register('list_plan_view_types', 'Перечислить доступные типы планов этажей, потолков и конструктивных планов.', empty);
-register('get_element_properties', 'Получить основные свойства и до 40 параметров каждого элемента.', z.object({ elementIds }));
+register('get_element_properties', 'Получить свойства, габариты и полные параметры экземпляра/типа постранично. Значения содержат внутренние единицы и unitId; parameterHasMore означает необходимость следующей страницы.', z.object({
+  elementIds, parameterScope: z.enum(['instance','type','both']).default('both'),
+  parameterOffset: z.number().int().min(0).default(0), parameterLimit: z.number().int().min(1).max(500).default(100),
+  includeParameters: z.boolean().default(true)
+}));
 register('select_elements', 'Выбрать указанные элементы в интерфейсе Revit. Модель не меняется.', z.object({ elementIds }), { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
 register('preview_set_parameter', 'Подготовить предварительный просмотр пакетного изменения одного параметра. Ничего не меняет.', z.object({
   elementIds,
@@ -202,6 +214,7 @@ registerRoofTools(register);
 registerMepTools(register);
 registerFamilyTools(register);
 registerStructureTools(register);
+registerModelTools(register);
 
 function registerLocal(name, description, inputSchema, handler, annotations = { readOnlyHint: false, destructiveHint: false, openWorldHint: false }) {
   server.registerTool(name, { description, inputSchema, annotations }, async args => {
@@ -214,8 +227,10 @@ function registerLocal(name, description, inputSchema, handler, annotations = { 
   });
 }
 
-registerLocal('store_project_data', 'Сохранить локальный снимок сведений о проекте и статистики текущей модели.', empty, saveProjectSnapshot);
-registerLocal('store_room_data', 'Сохранить локальный снимок всех помещений текущей модели для последующего поиска при закрытом Revit.', empty, saveRoomSnapshot);
+const routing = z.object({processId:z.number().int().positive().optional()});
+registerLocal('store_project_data', 'Сохранить локальный снимок сведений о проекте и статистики текущей модели.', routing, saveProjectSnapshot);
+registerLocal('get_running_revit_instances', 'Обнаружить доступные экземпляры Revit с загруженным мостом. Возвращает PID и имя активного документа; устаревшие подключения исключаются.', empty, getRunningInstances, { readOnlyHint: true, destructiveHint: false, openWorldHint: false });
+registerLocal('store_room_data', 'Сохранить локальный снимок всех помещений текущей модели для последующего поиска при закрытом Revit.', routing, saveRoomSnapshot);
 registerLocal('query_stored_data', 'Искать в локально сохранённых снимках проектов и помещений. Revit может быть закрыт.', z.object({
   query: z.string().max(200).default(''),
   dataset: z.enum(['all', 'projects', 'rooms']).default('all'),

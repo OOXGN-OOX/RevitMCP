@@ -23,9 +23,9 @@ internal static partial class RevitTools
     }
 
     private static object PreviewCreateSheets(UIApplication app, JsonElement args) =>
-        PreviewOperation(app,args,"createSheets","Листы А3 и размещение видов",CreateSheets);
+        PreviewOperation(app,args,"createSheets","Листы и размещение видов",CreateSheets);
     private static object ApplyCreateSheets(UIApplication app, JsonElement args, Func<bool>? cancelled) =>
-        ApplyOperation(app,args,"createSheets","Создать листы А3?",CreateSheets,cancelled);
+        ApplyOperation(app,args,"createSheets","Создать листы?",CreateSheets,cancelled);
 
     private static object CreateSheets(Document doc, JsonElement args)
     {
@@ -57,8 +57,7 @@ internal static partial class RevitTools
             doc.Regenerate();
             var outline=sheet.Outline;
             var width=SheetMm(outline.Max.U-outline.Min.U); var height=SheetMm(outline.Max.V-outline.Min.V);
-            if(Math.Abs(width-420)>1 || Math.Abs(height-297)>1)
-                throw new ArgumentException($"Selected title block produces {width:F1} x {height:F1} mm; landscape A3 (420 x 297 mm) is required.");
+            if(width <= 0 || height <= 0) throw new ArgumentException("Title block must define a positive sheet size.");
             XYZ Position(double x,double y)=>new(outline.Min.U+SheetUnits(x),outline.Min.V+SheetUnits(y),0);
             var placed=new List<object>();
             foreach(var placement in request.GetProperty("views").EnumerateArray())
@@ -96,7 +95,7 @@ internal static partial class RevitTools
                 var box=viewport.GetBoxOutline();
                 if(box.MinimumPoint.X < outline.Min.U+SheetUnits(20) || box.MaximumPoint.X > outline.Max.U-SheetUnits(5)
                     || box.MinimumPoint.Y < outline.Min.V+SheetUnits(5) || box.MaximumPoint.Y > outline.Max.V-SheetUnits(5))
-                    throw new InvalidOperationException($"View '{view.Name}' exceeds the A3 frame at scale 1:{scale}; adjust placement/scale.");
+                    throw new InvalidOperationException($"View '{view.Name}' exceeds the sheet frame at scale 1:{scale}; adjust placement/scale.");
                 placed.Add(new {sourceViewId=sourceId,viewId=view.Id.Value,viewportId=viewport.Id.Value,viewName=view.Name,scale,
                     minXmm=SheetMm(box.MinimumPoint.X-outline.Min.U),minYmm=SheetMm(box.MinimumPoint.Y-outline.Min.V),maxXmm=SheetMm(box.MaximumPoint.X-outline.Min.U),maxYmm=SheetMm(box.MaximumPoint.Y-outline.Min.V)});
             }

@@ -23,9 +23,8 @@ for (const text of [manual, deployment]) {
   assert.ok(text.includes('<FullClassName>RevitMCP.Loader.PluginApplication</FullClassName>'));
   assert.ok(text.includes('<VendorId>OOXG</VendorId>'));
 }
-const csharpPort = (await read('loader/BridgeService.cs')).match(/const int Port = (\d+)/)?.[1];
-assert.equal(csharpPort, (await read('server/src/revit-bridge.js')).match(/const PORT = (\d+)/)?.[1]);
-assert.equal(csharpPort, '37652');
+assert.ok((await read('loader/BridgeService.cs')).includes('TcpListener(IPAddress.Loopback, 0)'));
+assert.ok((await read('server/src/revit-bridge.js')).includes('discoverInstances'));
 for (const name of ['connection', 'auto-confirm', 'update'])
   for (const size of [16, 32]) await access(path.join(repo, `assets/icons/${name}-${size}.png`));
 await access(path.join(repo, 'assets/revit-mcp.ico'));

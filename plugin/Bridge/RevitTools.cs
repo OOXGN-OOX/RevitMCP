@@ -32,6 +32,34 @@ internal static partial class RevitTools
             }
             object result = request.Tool switch
             {
+                "show_elements" => ShowElements(application, args),
+                "preview_tag_elements" => PreviewOperation(application, args, "genericTags", "Марки элементов", TagModelElements),
+                "apply_tag_elements" => ApplyOperation(application, args, "genericTags", "Создать марки?", TagModelElements, isCancelled),
+                "list_views" => ListViews(application, args),
+                "list_sheet_collections" => ListSheetCollections(application, args),
+                "get_room_boundaries" => GetRoomBoundaries(application, args),
+                "get_schedule_definition" => DocSchedule(RequireDocument(application), RequireSchedule(RequireDocument(application), args)),
+                "get_schedulable_fields" => GetSchedulableFields(application, args),
+                "get_fill_and_line_patterns" => GetGraphicsResources(application),
+                "get_annotation_categories" => GetAnnotationCategories(application, args),
+                "export_views" => ExportViews(application, args),
+                "export_model" => ExportModel(application, args),
+                "preview_move_elements" => PreviewOperation(application, args, "move", "Перемещение элементов", MoveModelElements),
+                "apply_move_elements" => ApplyOperation(application, args, "move", "Переместить элементы?", MoveModelElements, isCancelled),
+                "preview_rotate_elements" => PreviewOperation(application, args, "rotate", "Вращение элементов", RotateModelElements),
+                "apply_rotate_elements" => ApplyOperation(application, args, "rotate", "Повернуть элементы?", RotateModelElements, isCancelled),
+                "preview_change_element_types" => PreviewOperation(application, args, "changeTypes", "Смена типов элементов", ChangeModelTypes),
+                "apply_change_element_types" => ApplyOperation(application, args, "changeTypes", "Изменить типы?", ChangeModelTypes, isCancelled),
+                "preview_create_schedule" => PreviewOperation(application, args, "schedule", "Создание спецификации", CreateModelSchedule),
+                "apply_create_schedule" => ApplyOperation(application, args, "schedule", "Создать спецификацию?", CreateModelSchedule, isCancelled),
+                "preview_modify_schedule" => PreviewOperation(application, args, "modifySchedule", "Настройка спецификации", ModifyModelSchedule),
+                "apply_modify_schedule" => ApplyOperation(application, args, "modifySchedule", "Изменить спецификацию?", ModifyModelSchedule, isCancelled),
+                "preview_edit_sheet" => PreviewOperation(application, args, "editSheet", "Настройка листа", EditModelSheet),
+                "apply_edit_sheet" => ApplyOperation(application, args, "editSheet", "Изменить лист?", EditModelSheet, isCancelled),
+                "preview_override_graphics" => PreviewOperation(application, args, "overrides", "Графические переопределения", OverrideModelGraphics),
+                "apply_override_graphics" => ApplyOperation(application, args, "overrides", "Изменить графику?", OverrideModelGraphics, isCancelled),
+                "preview_isolate_annotations" => PreviewOperation(application, args, "isolateAnnotations", "Изоляция аннотаций", IsolateModelAnnotations),
+                "apply_isolate_annotations" => ApplyOperation(application, args, "isolateAnnotations", "Изолировать аннотации?", IsolateModelAnnotations, isCancelled),
                 "get_family_authoring_options" => FamilyAuthoringOptions(),
                 "read_family_file" => ReadFamilyFile(application, args),
                 "read_family_type_catalog" => ReadFamilyCatalog(args),
@@ -157,7 +185,7 @@ internal static partial class RevitTools
             revitVersion = app.Application.VersionNumber,
             activeDocumentOpen = document is not null,
             projectName = document?.Title,
-            bridgePort = 37652
+            processId = Environment.ProcessId
         };
     }
 
@@ -171,6 +199,9 @@ internal static partial class RevitTools
             projectNumber = document.ProjectInformation.Number,
             clientName = document.ProjectInformation.ClientName,
             filePath = document.PathName,
+            documentKey = document.ProjectInformation.UniqueId,
+            documentRevision = DocumentRevision(document),
+            selectedElementIds = app.ActiveUIDocument!.Selection.GetElementIds().Select(id => id.Value).ToArray(),
             revitVersion = app.Application.VersionNumber,
             activeView = new
             {
@@ -223,6 +254,9 @@ internal static partial class RevitTools
         var familyFilter = JsonTools.GetString(args, "familyName");
         var typeFilter = JsonTools.GetString(args, "typeName");
         var viewScope = JsonTools.GetString(args, "viewScope", "project");
+        var requestedViewId = args.TryGetProperty("viewId", out var viewValue) ? viewValue.GetInt64() : 0;
+        var requestedLevelId = args.TryGetProperty("levelId", out var levelValue) ? levelValue.GetInt64() : 0;
+        var parameterFilters = args.TryGetProperty("parameterFilters", out var pf) ? pf.EnumerateArray().ToArray() : [];
         var includeHiddenInView = args.TryGetProperty("includeHiddenInView", out var includeHiddenValue)
             && includeHiddenValue.ValueKind == JsonValueKind.True;
         var offset = Math.Clamp(JsonTools.GetInt(args, "offset", 0), 0, 100000);
@@ -233,15 +267,18 @@ internal static partial class RevitTools
 
         if (viewScope is not ("project" or "activeView"))
             throw new ArgumentException("viewScope must be 'project' or 'activeView'.");
-        if (includeHiddenInView && viewScope != "activeView")
-            throw new ArgumentException("includeHiddenInView requires viewScope='activeView'.");
+        if (includeHiddenInView && viewScope != "activeView" && requestedViewId == 0)
+            throw new ArgumentException("includeHiddenInView requires viewScope='activeView' or viewId.");
         if (query.Length == 0 && categoryFilter.Length == 0 && classFilter.Length == 0
             && familyFilter.Length == 0 && typeFilter.Length == 0 && elementId == 0 && bounds is null
-            && viewScope == "project")
+            && viewScope == "project" && requestedViewId == 0 && requestedLevelId == 0 && parameterFilters.Length == 0)
             throw new ArgumentException("Provide a query or at least one element filter.");
 
         var activeView = app.ActiveUIDocument!.ActiveView;
-        FilteredElementCollector collector = viewScope == "activeView"
+        if (requestedViewId > 0)
+            activeView = document.GetElement(new ElementId(requestedViewId)) as View ?? throw new ArgumentException("viewId must identify a view.");
+        if (requestedLevelId > 0 && document.GetElement(new ElementId(requestedLevelId)) is not Level) throw new ArgumentException("levelId must identify a level.");
+        FilteredElementCollector collector = viewScope == "activeView" || requestedViewId > 0
             ? new FilteredElementCollector(document, activeView.Id)
             : new FilteredElementCollector(document);
         collector.WhereElementIsNotElementType();
@@ -261,6 +298,8 @@ internal static partial class RevitTools
         var seenIds = new HashSet<long>();
         foreach (var element in candidates)
         {
+            if (requestedLevelId > 0 && element.LevelId.Value != requestedLevelId) continue;
+            if (!parameterFilters.All(filter => MatchParameter(document, element, filter))) continue;
             if (elementId != 0 && element.Id.Value != elementId) continue;
             if (!CategoryMatches(element, categoryFilter)) continue;
             if (classFilter.Length > 0 && !ClassMatches(element, classFilter)) continue;
@@ -281,13 +320,17 @@ internal static partial class RevitTools
         return new
         {
             query,
-            view = viewScope == "activeView" ? activeView.Name : null,
+            view = viewScope == "activeView" || requestedViewId > 0 ? activeView.Name : null,
             matchingCount = matches.Count,
             returnedCount = rows.Count,
             offset,
             nextOffset,
             hasMore = nextOffset < matches.Count,
             limit,
+            analysis = new {
+                categories = matches.GroupBy(e => e.Category?.Name ?? "").Select(g => new { name = g.Key, count = g.Count() }).ToArray(),
+                levels = matches.GroupBy(e => e.LevelId.Value).Select(g => new { id = g.Key, name = document.GetElement(new ElementId(g.Key))?.Name, count = g.Count() }).ToArray()
+            },
             elements = rows
         };
     }
@@ -504,7 +547,7 @@ internal static partial class RevitTools
         {
             var element = document.GetElement(new ElementId(id));
             if (element is null) missing.Add(id);
-            else found.Add(Summarize(document, element, includeParameters: true));
+            else found.Add(FullElementProperties(document, element, args));
         }
         return new { foundCount = found.Count, missingIds = missing, elements = found };
     }

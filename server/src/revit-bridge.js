@@ -1,27 +1,15 @@
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 
 const HOST = '127.0.0.1';
-const PORT = 37652;
 const TIMEOUT_MS = 310_000;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
-async function loadToken() {
-  if (process.env.REVIT_MCP_TOKEN) return process.env.REVIT_MCP_TOKEN.trim();
-  const localAppData = process.env.LOCALAPPDATA;
-  if (!localAppData) throw new Error('LOCALAPPDATA is not set; cannot locate the Revit bridge token.');
-  const tokenPath = path.join(localAppData, 'RevitMCP', 'bridge.token');
-  try {
-    return (await readFile(tokenPath, 'utf8')).trim();
-  } catch {
-    throw new Error(`Revit bridge token was not found at ${tokenPath}. Start Revit with the add-in loaded first.`);
-  }
-}
 
 // The factory allows isolated TCP tests; MCP callers cannot override the endpoint.
-export function createRevitClient({ port = PORT, timeoutMs = TIMEOUT_MS, tokenLoader = loadToken,
+export function createRevitClient({ port, timeoutMs = TIMEOUT_MS, tokenLoader = async () => { throw new Error("Instance token is required."); },
   maxResponseBytes = MAX_RESPONSE_BYTES, maxRequestBytes = 1024 * 1024 } = {}) {
  return async function call(tool, args = {}, { signal } = {}) {
   signal?.throwIfAborted();
@@ -80,4 +68,44 @@ export function createRevitClient({ port = PORT, timeoutMs = TIMEOUT_MS, tokenLo
  };
 }
 
-export const callRevit = createRevitClient();
+export async function discoverInstances(directory) {
+  if (directory === undefined) {
+    if (!process.env.LOCALAPPDATA) throw new Error('LOCALAPPDATA is required for Revit instance discovery.');
+    directory = path.join(process.env.LOCALAPPDATA, 'RevitMCP', 'instances');
+  }
+  let names;
+  try { names = await readdir(directory); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  const rows = await Promise.all(names.filter(name => /^\d+\.json$/.test(name)).map(async name => {
+    try {
+      const descriptor = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
+      const { processId, instanceId, port, token } = descriptor;
+      if (!Number.isSafeInteger(processId) || processId <= 0 || `${processId}.json` !== name
+        || typeof instanceId !== 'string' || !/^[a-f0-9]{32}$/i.test(instanceId)
+        || !Number.isInteger(port) || port < 1 || port > 65535 || typeof token !== 'string' || token.length < 32) return null;
+      const info = await createRevitClient({ port, tokenLoader: async () => token, timeoutMs: 1500 })('connection_info');
+      if (info.processId !== processId || info.instanceId !== instanceId) return null;
+      return { processId, instanceId, port, token, documentName: info.documentName };
+    } catch { return null; }
+  }));
+  return rows.filter(Boolean).sort((a,b) => a.processId-b.processId);
+}
+
+export async function getRunningInstances() {
+  return { instances: (await discoverInstances()).map(({ token, ...info }) => info) };
+}
+
+export function createDiscoveredClient(discover = discoverInstances) {
+ return async function(tool, args = {}, options = {}) {
+  options.signal?.throwIfAborted();
+  const { processId, ...argumentsWithoutRouting } = args;
+  const instances = await discover();
+  const instance = processId === undefined
+    ? (instances.length === 1 ? instances[0] : null)
+    : instances.find(row => row.processId === processId);
+  if (!instance) throw new Error(instances.length > 1 && processId === undefined
+    ? 'Several Revit instances are running. Use get_running_revit_instances and pass processId.'
+    : 'Requested Revit instance is not available. Start Revit with the current loader and call get_running_revit_instances.');
+  return createRevitClient({ port: instance.port, tokenLoader: async () => instance.token })(tool, argumentsWithoutRouting, options);
+ };
+}
+export const callRevit = createDiscoveredClient();

@@ -17,6 +17,7 @@ internal sealed class BridgeResponse
     [JsonPropertyName("result")] public object? Result { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
     public static BridgeResponse Failure(string id, string error) => new() { Id = id, Error = error };
+    public static BridgeResponse Success(string id, object result) => new() { Id = id, Ok = true, Result = result };
 }
 internal sealed class PendingRequest(BridgeRequest request)
 {

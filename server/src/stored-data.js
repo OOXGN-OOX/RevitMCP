@@ -55,9 +55,9 @@ async function loadSnapshots(kind) {
   return rows;
 }
 
-export async function saveProjectSnapshot() {
-  const project = await callRevit('get_project_info', {});
-  const stats = await callRevit('get_project_stats', {});
+export async function saveProjectSnapshot({processId} = {}) {
+  const project = await callRevit('get_project_info', {processId});
+  const stats = await callRevit('get_project_stats', {processId});
   const key = projectKey(project);
   const snapshot = {
     schemaVersion,
@@ -84,8 +84,8 @@ export async function saveProjectSnapshot() {
   };
 }
 
-export async function saveRoomSnapshot() {
-  const project = await callRevit('get_project_info', {});
+export async function saveRoomSnapshot({processId} = {}) {
+  const project = await callRevit('get_project_info', {processId});
   const rooms = [];
   let matchingCount = 0;
 
@@ -93,7 +93,7 @@ export async function saveRoomSnapshot() {
     if (offset >= maxRoomSnapshot) {
       throw new Error(`Room snapshot limit reached (${maxRoomSnapshot}); no snapshot was written.`);
     }
-    const page = await callRevit('list_rooms', { offset, limit: pageSize });
+    const page = await callRevit('list_rooms', { processId, offset, limit: pageSize });
     matchingCount = page.matchingCount;
     if (!Array.isArray(page.rooms)) throw new Error('Revit returned an invalid room page.');
     rooms.push(...page.rooms);

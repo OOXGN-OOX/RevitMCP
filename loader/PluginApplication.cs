@@ -12,6 +12,7 @@ public sealed class PluginApplication : IExternalApplication
         {
             CoreHost.Initialize();
             application.ControlledApplication.DocumentChanged += CoreHost.Changed;
+            application.Idling += BridgeService.RefreshContext;
 
             const string tabName = "Revit MCP";
             try { application.CreateRibbonTab(tabName); }
@@ -36,8 +37,6 @@ public sealed class PluginApplication : IExternalApplication
             buttons.Add((PushButton)panel.AddItem(update), "update");
             CoreHost.RefreshIcons = RefreshIcons;
             RefreshIcons();
-            // Keep the ribbon available if another Revit process currently owns
-            // the port. The connection button can retry once the port is free.
             try { BridgeService.Start(); }
             catch (System.Net.Sockets.SocketException) { }
             return Result.Succeeded;
@@ -45,6 +44,7 @@ public sealed class PluginApplication : IExternalApplication
         catch (Exception exception)
         {
             application.ControlledApplication.DocumentChanged -= CoreHost.Changed;
+            application.Idling -= BridgeService.RefreshContext;
             TaskDialog.Show("Revit MCP", $"Не удалось запустить локальный мост:\n{exception.Message}");
             CoreHost.Shutdown();
             return Result.Failed;
@@ -54,6 +54,7 @@ public sealed class PluginApplication : IExternalApplication
     public Result OnShutdown(UIControlledApplication application)
     {
         application.ControlledApplication.DocumentChanged -= CoreHost.Changed;
+        application.Idling -= BridgeService.RefreshContext;
         CoreHost.Shutdown();
         return Result.Succeeded;
     }

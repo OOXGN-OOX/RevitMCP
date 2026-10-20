@@ -46,7 +46,7 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   assert.equal(new Set(names).size, names.length);
   const source = await readFile(new URL('../../plugin/Bridge/RevitTools.cs', import.meta.url), 'utf8');
   const routed = [...source.slice(0, source.indexOf('private static object Ping')).matchAll(/"([a-z_]+)"\s*=>/g)].map(match => match[1]);
-  const local = ['store_project_data', 'store_room_data', 'query_stored_data'];
+  const local = ['store_project_data', 'store_room_data', 'query_stored_data', 'get_running_revit_instances'];
   assert.deepEqual(names.filter(name => !local.includes(name)).sort(), [...new Set(routed)].sort());
   for (const name of ['preview_place_hosted_families', 'apply_create_dimensions', 'preview_tag_rooms', 'apply_color_by_parameter'])
     assert.ok(names.includes(name), `Missing tool ${name}`);
@@ -61,6 +61,36 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   assert.equal(deletion.annotations.destructiveHint, true);
   const invalid = await rpc('tools/call', { name: 'preview_place_hosted_families', arguments: { instances: [] } });
   assert.ok(invalid.error || invalid.result?.isError, 'Invalid batch must be rejected before bridge access');
+});
+
+test('read-only MCP profile does not expose or dispatch mutation tools', async t => {
+  const child=spawn(process.execPath,[fileURLToPath(new URL('../src/index.js',import.meta.url))],
+    {stdio:['pipe','pipe','pipe'],windowsHide:true,env:{...process.env,REVIT_MCP_ACCESS:'read'}});
+  t.after(()=>child.kill());
+  child.stderr.resume();
+  let buffer='',nextId=0;
+  const pending=new Map();
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data',chunk=>{
+    buffer+=chunk;
+    while(buffer.includes('\n')) {
+      const at=buffer.indexOf('\n'), message=JSON.parse(buffer.slice(0,at)); buffer=buffer.slice(at+1);
+      pending.get(message.id)?.(message);
+    }
+  });
+  const rpc=(method,params)=>new Promise((resolve,reject)=>{
+    const id=++nextId, timeout=setTimeout(()=>reject(new Error('RPC timed out')),5000);
+    pending.set(id,result=>{clearTimeout(timeout);pending.delete(id);resolve(result);});
+    child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');
+  });
+  await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'test',version:'1'}});
+  child.stdin.write(JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized'})+'\n');
+  const listed=await rpc('tools/list',{});
+  assert.ok(listed.result.tools.some(t=>t.name==='get_running_revit_instances'));
+  assert.ok(listed.result.tools.some(t=>t.name==='show_elements'));
+  assert.ok(listed.result.tools.every(t=>!t.name.startsWith('preview_')&&!t.name.startsWith('apply_')));
+  const rejected=await rpc('tools/call',{name:'apply_move_elements',arguments:{planId:'x'}});
+  assert.ok(rejected.error||rejected.result?.isError);
 });
 
 const contracts = new Map();
@@ -148,7 +178,8 @@ test('sheet layout rejects incomplete views and reversed crop boxes', () => {
   const view={sourceViewId:1,viewName:'Plan A3',scale:50,centerXmm:200,centerYmm:165};
   const sheet={number:'АР-01',name:'План этажа',views:[view]};
   assert.ok(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[sheet]}));
-  assert.equal(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[{...sheet,views:[]}]}),false);
+  assert.ok(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[{...sheet,views:[]}]}));
+  assert.ok(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[{...sheet,views:[{...view,centerXmm:600,centerYmm:400}]}]}));
   assert.equal(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[{...sheet,views:[{...view,scale:0}]}]}),false);
   assert.equal(parse('preview_create_sheets',{titleBlockTypeId:2,sheets:[{...sheet,views:[{...view,crop:{minX:1,maxX:0,minY:0,maxY:1,minZ:0,maxZ:1}}]}]}),false);
   assert.equal(parse('export_sheets_pdf',{sheetIds:[],path:'C:/out.pdf'}),false);

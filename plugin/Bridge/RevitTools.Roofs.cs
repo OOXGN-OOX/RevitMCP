@@ -83,6 +83,19 @@ internal static partial class RevitTools
         var result=new List<object>();
         foreach(var r in requests.EnumerateArray())
         {
+            BoundingBoxXYZ box;
+            if(r.TryGetProperty("box",out var requestedBox))
+            {
+                XYZ Vector(string key) { var v=requestedBox.GetProperty(key); return new XYZ(v.GetProperty("x").GetDouble(),v.GetProperty("y").GetDouble(),v.GetProperty("z").GetDouble()); }
+                var right=Vector("right"); var up=Vector("up"); var direction=Vector("direction");
+                if(Math.Abs(right.GetLength()-1)>1e-6 || Math.Abs(up.GetLength()-1)>1e-6 || Math.Abs(direction.GetLength()-1)>1e-6
+                    || !right.CrossProduct(up).IsAlmostEqualTo(direction)) throw new ArgumentException("Section basis must be orthonormal and right-handed.");
+                var frame=Transform.Identity; frame.Origin=ModelPoint(requestedBox.GetProperty("origin")); frame.BasisX=right; frame.BasisY=up; frame.BasisZ=direction;
+                box=new BoundingBoxXYZ { Transform=frame, Min=ModelPoint(requestedBox.GetProperty("min")), Max=ModelPoint(requestedBox.GetProperty("max")) };
+                if(box.Min.X>=box.Max.X || box.Min.Y>=box.Max.Y || box.Min.Z>=box.Max.Z) throw new ArgumentException("Section box must have positive dimensions.");
+            }
+            else
+            {
             var x=BuildingNumber(r,"xMeters",-100000,100000);var y=BuildingNumber(r,"yMeters",-100000,100000);
             var bottom=BuildingNumber(r,"bottomMeters",-1000,10000);var top=BuildingNumber(r,"topMeters",-1000,10000);
             if(top-bottom<0.1)throw new ArgumentException("Section top must be above bottom.");
@@ -91,7 +104,8 @@ internal static partial class RevitTools
             if(Math.Abs(dx*dx+dy*dy-1)>1e-6)throw new ArgumentException("Section direction must be a unit vector.");
             var dir=new XYZ(dx,dy,0);var transform=Transform.Identity;
             transform.Origin=new XYZ(BuildingFeet(x),BuildingFeet(y),BuildingFeet(bottom));transform.BasisX=XYZ.BasisZ.CrossProduct(dir);transform.BasisY=XYZ.BasisZ;transform.BasisZ=dir;
-            var box=new BoundingBoxXYZ{Transform=transform,Min=new XYZ(-BuildingFeet(width)/2,0,0),Max=new XYZ(BuildingFeet(width)/2,BuildingFeet(top-bottom),BuildingFeet(depth))};
+            box=new BoundingBoxXYZ{Transform=transform,Min=new XYZ(-BuildingFeet(width)/2,0,0),Max=new XYZ(BuildingFeet(width)/2,BuildingFeet(top-bottom),BuildingFeet(depth))};
+            }
             var view=ViewSection.CreateSection(doc,type.Id,box);view.Name=JsonTools.GetString(r,"name");view.Scale=100;view.CropBoxVisible=false;view.DetailLevel=ViewDetailLevel.Fine;
             // Newly created sections can default to an early phase and hide later model elements.
             var phaseParameter=view.get_Parameter(BuiltInParameter.VIEW_PHASE);

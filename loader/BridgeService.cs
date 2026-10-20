@@ -10,7 +10,7 @@ namespace RevitMCP.Loader;
 
 internal sealed class BridgeService
 {
-    public const int Port = 37652;
+    public static int Port => (_instance?._listener.LocalEndpoint as IPEndPoint)?.Port ?? 0;
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromMinutes(5);
     private const int MaxLineLength = 1024 * 1024;
     private static readonly ConcurrentQueue<PendingRequest> Queue = new();
@@ -20,13 +20,27 @@ internal sealed class BridgeService
     private readonly CancellationTokenSource _cancellation = new();
     private readonly ExternalEvent _externalEvent;
     private readonly string _token;
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
+    private readonly string _descriptorPath;
+    private string? _documentName;
 
     private BridgeService()
     {
         _externalEvent = ExternalEvent.Create(new RevitRequestHandler());
-        _token = LoadOrCreateToken();
-        _listener = new TcpListener(IPAddress.Loopback, Port);
+        _token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevitMCP", "instances");
+        Directory.CreateDirectory(directory);
+        _descriptorPath = Path.Combine(directory, $"{Environment.ProcessId}.json");
+        _listener = new TcpListener(IPAddress.Loopback, 0);
         try { _listener.Start(8); }
+        catch
+        {
+            _listener.Stop();
+            _externalEvent.Dispose();
+            _cancellation.Dispose();
+            throw;
+        }
+        try { WriteDescriptor(); }
         catch
         {
             _listener.Stop();
@@ -53,6 +67,7 @@ internal sealed class BridgeService
         instance._listener.Stop();
         instance._externalEvent.Dispose();
         instance._cancellation.Dispose();
+        try { File.Delete(instance._descriptorPath); } catch (IOException) { }
     }
 
     public static void CancelPending(string message)
@@ -65,22 +80,25 @@ internal sealed class BridgeService
         }
     }
 
-    private static string LoadOrCreateToken()
+    private void WriteDescriptor()
     {
-        var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevitMCP");
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "bridge.token");
-        if (File.Exists(path))
-        {
-            var existing = File.ReadAllText(path).Trim();
-            if (existing.Length >= 32) return existing;
-        }
-
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        File.WriteAllText(path, token, new UTF8Encoding(false));
-        return token;
+        var temporary = _descriptorPath + ".tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(new {
+            processId = Environment.ProcessId, instanceId = _instanceId,
+            port = ((IPEndPoint)_listener.LocalEndpoint).Port, token = _token,
+            documentName = _documentName
+        }), new UTF8Encoding(false));
+        File.Move(temporary, _descriptorPath, true);
     }
 
+    public static void RefreshContext(object? sender, Autodesk.Revit.UI.Events.IdlingEventArgs args)
+    {
+        if (_instance is not { } instance || sender is not UIApplication app) return;
+        var name = app.ActiveUIDocument?.Document.Title;
+        if (name == instance._documentName) return;
+        instance._documentName = name;
+        try { instance.WriteDescriptor(); } catch (IOException) { }
+    }
     private async Task AcceptLoopAsync()
     {
         while (!_cancellation.IsCancellationRequested)
@@ -130,6 +148,14 @@ internal sealed class BridgeService
                 if (request is null || !TokensMatch(request.Token, _token))
                 {
                     await writer.WriteLineAsync(JsonSerializer.Serialize(BridgeResponse.Failure(request?.Id ?? "", "Authentication failed."), JsonTools.SerializerOptions));
+                    return;
+                }
+
+                if (request.Tool == "connection_info")
+                {
+                    await writer.WriteLineAsync(JsonSerializer.Serialize(BridgeResponse.Success(request.Id, new {
+                        processId = Environment.ProcessId, instanceId = _instanceId, documentName = _documentName
+                    }), JsonTools.SerializerOptions));
                     return;
                 }
 
