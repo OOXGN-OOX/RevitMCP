@@ -93,6 +93,8 @@ internal static partial class RevitTools
                 "apply_color_by_parameter" => ApplyColorByParameter(application, args, isCancelled),
                 "preview_duplicate_family_types" => PreviewDuplicateFamilyTypes(application, args),
                 "apply_duplicate_family_types" => ApplyDuplicateFamilyTypes(application, args, isCancelled),
+                "preview_rename_family" => PreviewRenameFamily(application, args),
+                "apply_rename_family" => ApplyRenameFamily(application, args, isCancelled),
                 "preview_load_family" => PreviewLoadFamily(application, args),
                 "apply_load_family" => ApplyLoadFamily(application, args, isCancelled),
                 "preview_create_room_separators" => PreviewCreateRoomSeparators(application, args),
@@ -441,6 +443,7 @@ internal static partial class RevitTools
             types = matches.Take(limit).Select(symbol => new
             {
                 id = symbol.Id.Value,
+                familyId = symbol.Family.Id.Value,
                 category = symbol.Category?.Name,
                 family = symbol.FamilyName,
                 type = symbol.Name,

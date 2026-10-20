@@ -14,6 +14,7 @@
 | --- | --- |
 | Двери и окна | `preview_place_hosted_families` / `apply_place_hosted_families` |
 | Новые типоразмеры | `preview_duplicate_family_types` / `apply_duplicate_family_types` |
+| Имя семейства или типоразмера | `preview_rename_family` / `apply_rename_family` |
 | MEP-коннекторы | `list_mep_connectors`, `preview_connect_mep` / `apply_connect_mep` |
 | Разработка RFA | `read_family_file`, `read_family_type_catalog`, `preview_build_family` / `apply_build_family`, `validate_family_file` |
 | Загрузка локального RFA | `preview_load_family` / `apply_load_family` |

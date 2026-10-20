@@ -36,3 +36,15 @@ test('catalog rows remain exact and reload policy is explicit', () => {
   for (const parameterPolicy of ['rejectExisting','preserve','overwrite']) assert.ok(valid('preview_load_family',{path:'C:/test.rfa',parameterPolicy,sharedFamilySource:'project'}));
   assert.equal(valid('validate_family_file',{path:'C:/test.rfa',testConnections:true,projectTemplatePath:'C:/live.rvt'}),false);
 });
+
+test('family rename requires an explicit element id and a bounded nonempty name', () => {
+  const request = {elementId:123,newName:'ОВ_Клапан 200×100'};
+  assert.ok(valid('preview_rename_family',request));
+  assert.equal(schemas.get('preview_rename_family').parse({...request,newName:' Тип 1 '}).newName,'Тип 1');
+  for (const invalid of [{...request,elementId:0},{...request,elementId:1.5},{...request,elementId:'123'},
+    {...request,newName:' '},{...request,newName:'x'.repeat(201)},{...request,newName:'A\nB'},
+    {...request,instanceId:12},{newName:'New'},{elementId:123}]) assert.equal(valid('preview_rename_family',invalid),false);
+  assert.ok(valid('apply_rename_family',{planId:'preview-id'}));
+  assert.equal(valid('apply_rename_family',request),false);
+  assert.equal(valid('apply_rename_family',{planId:'preview-id',newName:'unpreviewed'}),false);
+});

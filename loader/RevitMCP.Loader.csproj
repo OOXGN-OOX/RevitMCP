@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Version>0.0.2</Version>
-    <AssemblyVersion>0.0.2.2</AssemblyVersion>
+    <AssemblyVersion>0.0.2.3</AssemblyVersion>
     <Company>OOXGN</Company>
     <Product>Revit MCP</Product>
     <Title>Revit MCP</Title>
