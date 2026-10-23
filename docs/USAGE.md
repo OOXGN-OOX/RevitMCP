@@ -19,6 +19,7 @@
 | Имя семейства или типоразмера | `preview_rename_family` / `apply_rename_family` |
 | MEP-коннекторы | `list_mep_connectors`, `preview_connect_mep` / `apply_connect_mep` |
 | Разработка RFA | `read_family_file`, `read_family_type_catalog`, `preview_build_family` / `apply_build_family`, `validate_family_file` |
+| Выгрузка RFA из проекта/вложения | `preview_export_family` / `apply_export_family`, `preview_export_nested_family` / `apply_export_nested_family`; [проверки и ограничения](FAMILY-EXPORT.md) |
 | Загрузка локального RFA | `preview_load_family` / `apply_load_family` |
 | Размеры по опорам | `list_annotation_types`, `get_element_references`, `preview_create_dimensions` / `apply_create_dimensions` |
 | Марки | `preview_tag_walls`, `preview_tag_rooms`, `preview_tag_mep` и соответствующие `apply_*` |

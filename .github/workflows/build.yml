@@ -43,6 +43,8 @@ jobs:
         run: dotnet run --project tests/FamilyCatalog.Tests/FamilyCatalog.Tests.csproj -c Release
       - name: Test document revision lifecycle
         run: dotnet run --project tests/DocumentRevisions.Tests/DocumentRevisions.Tests.csproj -c Release
+      - name: Test family reload preservation
+        run: dotnet run --project tests/FamilyReload.Tests/FamilyReload.Tests.csproj -c Release
       - name: Test hot update and rollback
         shell: pwsh
         run: ./tests/updates.ps1

@@ -52,6 +52,19 @@ test('malformed response and bridge error are not successful results', async () 
     call => assert.rejects(call('read'), /Rejected in Revit/));
 });
 
+test('Revit failure diagnostics survive the bridge without losing the original message', async () => {
+  const details={exceptionType:'RevitOperationException',diagnostics:{failures:[{
+    failureDefinitionId:'b4df66d7-740c-4f2e-91b2-d13cf517d566',severity:'Error',message:'Семейство больше не соответствует свойствам системы.',
+    failingElementIds:[100,101],additionalElementIds:[200]
+  }]}};
+  await withBridge((socket,request)=>socket.end(JSON.stringify({id:request.id,ok:false,error:'Revit rolled back the operation.',errorDetails:details})+'\n'),
+    call=>assert.rejects(call('preview_load_family'),error=>{
+      assert.equal(error.message,'Revit rolled back the operation.');
+      assert.deepEqual(error.details,details);
+      return true;
+    }));
+});
+
 test('oversized responses and early disconnects fail', async () => {
   await withBridge(socket => socket.end('x'.repeat(300)), call => assert.rejects(call('read'), /8 MB limit/), { maxResponseBytes: 100 });
   await withBridge(socket => socket.end(), call => assert.rejects(call('read'), /closed/));

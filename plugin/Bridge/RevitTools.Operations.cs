@@ -23,6 +23,7 @@ internal static partial class RevitTools
         Plans.Clear();
         OperationPlans.Clear();
         FamilyBuildPlans.Clear();
+        FamilyExportPlans.Clear();
         Revisions.Clear();
         TransactionFailures.Clear();
         LegacyWarnings.Clear();
@@ -53,7 +54,7 @@ internal static partial class RevitTools
         var status = transaction.Commit();
         TransactionFailures.TryGetValue(transaction, out var failures);
         if (status != TransactionStatus.Committed)
-            throw new InvalidOperationException("Revit did not commit the transaction. " + string.Join("; ", failures?.Errors ?? []));
+            throw new RevitOperationException("Revit did not commit the transaction. " + string.Join("; ", failures?.Errors ?? []), new { failures=failures?.Details });
         if (failures is not null) LegacyWarnings.AddRange(failures.Warnings);
     }
     private sealed record OperationPlan(string Id, string Kind, Document Document, long Revision,
@@ -77,12 +78,12 @@ internal static partial class RevitTools
     }
 
     private static object PreviewOperation(UIApplication app, JsonElement args, string kind, string summary,
-        Func<Document, JsonElement, object> operation)
+        Func<Document, JsonElement, object> operation, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
     {
         var document = RequireDocument(app);
         RequireWritableProject(document);
         var boundArgs = BindActiveView(app, args);
-        var preview = SimulateOperation(document, boundArgs, summary, operation);
+        var preview = SimulateOperation(document, boundArgs, summary, operation, afterCommit);
         PruneOperationPlans();
         if (OperationPlans.Count >= 100) throw new InvalidOperationException("Too many pending previews. Apply a plan or wait for expiry.");
         var id = Guid.NewGuid().ToString("N");
@@ -95,7 +96,7 @@ internal static partial class RevitTools
     }
 
     private static JsonElement SimulateOperation(Document document, JsonElement args, string summary,
-        Func<Document, JsonElement, object> operation)
+        Func<Document, JsonElement, object> operation, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
     {
         SimulationDepth++;
         try
@@ -104,7 +105,7 @@ internal static partial class RevitTools
             if (group.Start() != TransactionStatus.Started) throw new InvalidOperationException("Cannot start preview group.");
             try
             {
-                var result = ExecuteOperationTransaction(document, args, summary, operation, null);
+                var result = ExecuteOperationTransaction(document, args, summary, operation, null, afterCommit);
                 if (group.RollBack() != TransactionStatus.RolledBack) throw new InvalidOperationException("Revit did not roll back the preview group.");
                 return result;
             }
@@ -114,7 +115,7 @@ internal static partial class RevitTools
     }
 
     private static object ApplyOperation(UIApplication app, JsonElement args, string kind, string summary,
-        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled)
+        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
     {
         var document = RequireDocument(app);
         RequireWritableProject(document);
@@ -143,7 +144,7 @@ internal static partial class RevitTools
         if (group.Start() != TransactionStatus.Started) throw new InvalidOperationException("Cannot start apply group.");
         try
         {
-            var result = ExecuteOperationTransaction(document, plan.Arguments, summary, operation, isCancelled);
+            var result = ExecuteOperationTransaction(document, plan.Arguments, summary, operation, isCancelled, afterCommit);
             if (kind == "delete_checked")
             {
                 var expected = plan.Preview.GetProperty("result").GetProperty("deletedIds").EnumerateArray().Select(x => x.GetInt64()).Order();
@@ -154,7 +155,7 @@ internal static partial class RevitTools
             if (isCancelled?.Invoke() == true) throw new OperationCanceledException("MCP request cancelled before final commit.");
             if (group.Assimilate() != TransactionStatus.Committed) throw new InvalidOperationException("Revit did not commit the operation group.");
             OperationPlans.Remove(plan.Id);
-            return new { applied = true, result = result.GetProperty("result"), warnings = result.GetProperty("warnings") };
+            return new { applied = true, result = result.GetProperty("result"), warnings = result.GetProperty("warnings"), failures=result.GetProperty("failures") };
         }
         finally { if (group.GetStatus() == TransactionStatus.Started) group.RollBack(); }
     }
@@ -184,7 +185,7 @@ internal static partial class RevitTools
     }
 
     private static JsonElement ExecuteOperationTransaction(Document document, JsonElement args, string summary,
-        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled)
+        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
     {
         using var transaction = new Transaction(document, "Revit MCP: " + summary);
         if (transaction.Start() != TransactionStatus.Started) throw new InvalidOperationException("Cannot start Revit transaction.");
@@ -203,7 +204,8 @@ internal static partial class RevitTools
             var serialized = JsonSerializer.SerializeToElement(result, JsonTools.SerializerOptions);
             if (isCancelled?.Invoke() == true) throw new OperationCanceledException("MCP request cancelled before commit.");
             if (transaction.Commit() != TransactionStatus.Committed)
-                throw new InvalidOperationException("Revit rolled back the operation. " + string.Join("; ", failures.Errors));
+                throw new RevitOperationException("Revit rolled back the operation. " + string.Join("; ", failures.Errors), new { failures=failures.Details, operationResult=serialized });
+            if (afterCommit is not null) serialized=afterCommit(document,args,serialized);
             if (serialized.ValueKind == JsonValueKind.Object && serialized.TryGetProperty("deletedIds", out var immediateDeleted))
             {
                 // DocumentChanged includes additional deletes performed by Revit updaters during commit.
@@ -218,7 +220,7 @@ internal static partial class RevitTools
                 row["requiresDependentDeletionPermission"] = dependent.Length > 0;
                 serialized = JsonSerializer.SerializeToElement(row);
             }
-            return JsonSerializer.SerializeToElement(new { result = serialized, warnings = failures.Warnings }, JsonTools.SerializerOptions);
+            return JsonSerializer.SerializeToElement(new { result = serialized, warnings = failures.Warnings, failures=failures.Details }, JsonTools.SerializerOptions);
         }
         catch
         {
@@ -232,10 +234,13 @@ internal static partial class RevitTools
     {
         public List<string> Warnings { get; } = [];
         public List<string> Errors { get; } = [];
+        public List<RevitFailureDetails> Details { get; } = [];
         public FailureProcessingResult PreprocessFailures(FailuresAccessor accessor)
         {
             foreach (var failure in accessor.GetFailureMessages())
             {
+                Details.Add(new(failure.GetFailureDefinitionId().Guid.ToString(),failure.GetSeverity().ToString(),failure.GetDescriptionText(),
+                    failure.GetFailingElementIds().Select(id=>id.Value).Order().ToArray(),failure.GetAdditionalElementIds().Select(id=>id.Value).Order().ToArray()));
                 if (failure.GetSeverity() == FailureSeverity.Warning)
                 {
                     Warnings.Add(failure.GetDescriptionText());

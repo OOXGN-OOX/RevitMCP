@@ -16,6 +16,7 @@ internal sealed class BridgeResponse
     [JsonPropertyName("ok")] public bool Ok { get; init; }
     [JsonPropertyName("result")] public object? Result { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
+    [JsonPropertyName("errorDetails")] public JsonElement? ErrorDetails { get; init; }
     public static BridgeResponse Failure(string id, string error) => new() { Id = id, Error = error };
     public static BridgeResponse Success(string id, object result) => new() { Id = id, Ok = true, Result = result };
 }

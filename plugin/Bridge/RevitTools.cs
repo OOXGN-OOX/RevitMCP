@@ -32,6 +32,10 @@ internal static partial class RevitTools
             }
             object result = request.Tool switch
             {
+                "preview_export_family" => PreviewExportFamily(application, args, false, isCancelled),
+                "apply_export_family" => ApplyExportFamily(application, args, false, isCancelled),
+                "preview_export_nested_family" => PreviewExportFamily(application, args, true, isCancelled),
+                "apply_export_nested_family" => ApplyExportFamily(application, args, true, isCancelled),
                 "show_elements" => ShowElements(application, args),
                 "preview_tag_elements" => PreviewOperation(application, args, "genericTags", "Марки элементов", TagModelElements),
                 "apply_tag_elements" => ApplyOperation(application, args, "genericTags", "Создать марки?", TagModelElements, isCancelled),
@@ -170,7 +174,10 @@ internal static partial class RevitTools
         }
         catch (Exception exception)
         {
-            return BridgeResponse.Failure(request.Id, exception.Message);
+            return BridgeResponse.Failure(request.Id, exception.Message, new {
+                exceptionType=exception.GetType().FullName,
+                diagnostics=(exception as RevitOperationException)?.Details
+            });
         }
     }
 

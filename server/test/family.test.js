@@ -8,6 +8,26 @@ for (const register of [registerFamilyTools, registerAuthoringTools]) register((
 const valid = (tool, value) => schemas.get(tool).safeParse(value).success;
 const frame = { origin: {x:0,y:0,z:0}, basisX: {x:1,y:0,z:0}, basisZ: {x:0,y:0,z:1} };
 const plan = { sourcePath:'C:/Families/source.rfa', outputPath:'C:/Families/new.rfa', operations:[{action:'addType',name:'100'}] };
+test('family export requires exact, exclusive selectors and new absolute RFA paths', () => {
+  const project={familyId:12,outputPath:'C:/Families/Unit.rfa'};
+  const nested={sourcePath:'C:/Families/source.rfa',nestedFamilyId:23,outputPath:'C:/Families/neutral.rfa'};
+  assert.ok(valid('preview_export_family',project));
+  assert.ok(valid('preview_export_family',{familyName:' Unit ',outputPath:project.outputPath}));
+  assert.equal(schemas.get('preview_export_family').parse({familyName:' Unit ',outputPath:project.outputPath}).familyName,' Unit ');
+  for (const value of [{outputPath:project.outputPath},{...project,familyName:'Unit'},{...project,familyId:0},
+    {...project,familyId:1.5},{...project,outputPath:'relative.rfa'},{...project,outputPath:'C:/out.rvt'},{...project,overwrite:true}])
+    assert.equal(valid('preview_export_family',value),false,JSON.stringify(value));
+  assert.ok(valid('preview_export_nested_family',nested));
+  assert.ok(valid('preview_export_nested_family',{sourcePath:nested.sourcePath,nestedFamilyName:' Exact ',outputPath:nested.outputPath}));
+  for (const value of [{...nested,nestedFamilyName:'Unit'},{...nested,nestedFamilyId:undefined},{...nested,sourcePath:'C:/live.rvt'},
+    {...nested,outputPath:'c:\\families\\SOURCE.rfa'},{...nested,nestedFamilyId:-1},{...nested,overwrite:true}])
+    assert.equal(valid('preview_export_nested_family',value),false,JSON.stringify(value));
+  for (const tool of ['apply_export_family','apply_export_nested_family']) {
+    assert.ok(valid(tool,{planId:'reviewed'}));
+    assert.equal(valid(tool,{planId:'reviewed',outputPath:'C:/unreviewed.rfa'}),false);
+    assert.equal(valid(tool,{planId:''}),false);
+  }
+});
 test('family build preserves source and requires one source and a bounded batch', () => {
   assert.ok(valid('preview_build_family',plan));
   for (const input of [ {...plan,outputPath:'c:/families/SOURCE.rfa'}, {...plan,templatePath:'C:/template.rft'}, {...plan,sourcePath:undefined}, {...plan,outputPath:'relative.rfa'}, {...plan,operations:[]}, {...plan,operations:Array(201).fill(plan.operations[0])}, {...plan,overwrite:true} ])

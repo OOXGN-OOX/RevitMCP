@@ -17,12 +17,19 @@ internal static partial class RevitTools
     private static object FFrameInfo(Transform t) => new { origin = FCoordinates(t.Origin), basisX = FCoordinates(t.BasisX, false), basisY = FCoordinates(t.BasisY, false), basisZ = FCoordinates(t.BasisZ, false) };
     private static object[] FConnectors(Document doc) => new FilteredElementCollector(doc).OfClass(typeof(ConnectorElement)).Cast<ConnectorElement>().OrderBy(c => c.Id.Value).Select(c => (object)new
     {
-        id = c.Id.Value, domain = c.Domain.ToString(), shape = c.Shape.ToString(), system = c.SystemClassification.ToString(),
+        id = c.Id.Value, uniqueId=c.UniqueId, domain = c.Domain.ToString(), shape = c.Shape.ToString(), system = c.SystemClassification.ToString(),
+        systemClassification=new { rawValue=(int)c.SystemClassification, displayValue=c.SystemClassification.ToString() },
+        flowConfiguration=c.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_CONFIGURATION_PARAM) is Parameter config ? FamilyParameterInfo(config) : null,
+        flow=c.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM) is Parameter rate ? FamilyParameterInfo(rate) : null,
+        linkedConnectorElementId=c.GetLinkedConnectorElement()?.Id.Value,
         direction = FCoordinates(c.Direction, false), flowDirection = c.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM) is Parameter flow ? ((FlowDirectionType)flow.AsInteger()).ToString() : null,
-        primary = c.IsPrimary, frame = FFrameInfo(c.CoordinateSystem), diameterMeters = c.Shape == ConnectorProfileType.Round ? (double?)FMeters(c.Radius * 2) : null,
+        primary = c.IsPrimary, primaryValue=new { rawValue=c.IsPrimary?1:0,displayValue=c.IsPrimary.ToString() },
+        flowDirectionValue=c.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_DIRECTION_PARAM) is Parameter flowValue ? FamilyParameterInfo(flowValue) : null,
+        frame = FFrameInfo(c.CoordinateSystem), diameterMeters = c.Shape == ConnectorProfileType.Round ? (double?)FMeters(c.Radius * 2) : null,
         widthMeters = c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? (double?)FMeters(c.Width) : null, heightMeters = c.Shape is ConnectorProfileType.Rectangular or ConnectorProfileType.Oval ? (double?)FMeters(c.Height) : null,
         parameters = c.Parameters.Cast<Parameter>().OrderBy(p => p.Id.Value).Select(p => new { id = p.Id.Value, name = p.Definition.Name,
-            familyParameter = doc.FamilyManager.GetAssociatedFamilyParameter(p)?.Definition.Name }).ToArray()
+            values=FamilyParameterInfo(p),familyParameter = doc.FamilyManager.GetAssociatedFamilyParameter(p)?.Definition.Name,
+            familyParameterId=doc.FamilyManager.GetAssociatedFamilyParameter(p)?.Id.Value }).ToArray()
     }).ToArray();
     private static IEnumerable<Solid> FSolids(GeometryElement geometry)
     {
@@ -141,9 +148,10 @@ internal static partial class RevitTools
     }
     private sealed class FamilyLoadPolicy(string parameterPolicy, string sharedSource) : IFamilyLoadOptions
     {
-        public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = parameterPolicy == "overwrite"; return parameterPolicy != "rejectExisting"; }
+        public bool Rejected { get; private set; }
+        public bool OnFamilyFound(bool familyInUse, out bool overwriteParameterValues) { overwriteParameterValues = parameterPolicy == "overwrite"; Rejected |= parameterPolicy == "rejectExisting"; return parameterPolicy != "rejectExisting"; }
         public bool OnSharedFamilyFound(Family sharedFamily, bool familyInUse, out FamilySource source, out bool overwriteParameterValues)
-        { source = sharedSource == "file" ? FamilySource.Family : FamilySource.Project; overwriteParameterValues = parameterPolicy == "overwrite"; return parameterPolicy != "rejectExisting"; }
+        { source = sharedSource == "file" ? FamilySource.Family : FamilySource.Project; overwriteParameterValues = parameterPolicy == "overwrite"; Rejected |= parameterPolicy == "rejectExisting"; return parameterPolicy != "rejectExisting"; }
     }
     private static void FLoadNested(FamilyBuildContext ctx, JsonElement op)
     {

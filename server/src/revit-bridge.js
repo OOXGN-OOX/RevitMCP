@@ -53,7 +53,11 @@ export function createRevitClient({ port, timeoutMs = TIMEOUT_MS, tokenLoader = 
         const response = JSON.parse(data.slice(0, newline));
         if (!response || response.id !== id) throw new Error('Response request ID does not match.');
         if (typeof response.ok !== 'boolean') throw new Error('Response has no boolean ok field.');
-        if (!response.ok) finish(new Error(response.error ?? 'Revit returned an unspecified error.'));
+        if (!response.ok) {
+          const error=new Error(response.error ?? 'Revit returned an unspecified error.');
+          error.details=response.errorDetails;
+          finish(error);
+        }
         else finish(null, response.result);
       } catch (error) {
         finish(new Error(`Invalid response from Revit: ${error.message}`));

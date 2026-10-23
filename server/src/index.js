@@ -37,7 +37,7 @@ function register(name, description, inputSchema, annotations = { readOnlyHint: 
       const result = await callRevit(name, args, { signal: ctx?.mcpReq?.signal });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
-      return { isError: true, content: [{ type: 'text', text: error.message }] };
+      return { isError: true, content: [{ type: 'text', text: error.details === undefined ? error.message : JSON.stringify({message:error.message,...error.details},null,2) }] };
     }
   });
 }

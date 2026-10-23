@@ -17,9 +17,10 @@ internal sealed class BridgeResponse
     [JsonPropertyName("ok")] public bool Ok { get; init; }
     [JsonPropertyName("result")] public object? Result { get; init; }
     [JsonPropertyName("error")] public string? Error { get; init; }
+    [JsonPropertyName("errorDetails")] public object? ErrorDetails { get; init; }
 
     public static BridgeResponse Success(string id, object result) => new() { Id = id, Ok = true, Result = result };
-    public static BridgeResponse Failure(string id, string error) => new() { Id = id, Ok = false, Error = error };
+    public static BridgeResponse Failure(string id, string error, object? details = null) => new() { Id = id, Ok = false, Error = error, ErrorDetails = details };
 }
 
 internal sealed class ParameterPlan

@@ -44,6 +44,8 @@ internal static partial class RevitTools
         foreach (var key in new[] { "category", "categoryId", "placement", "shared" })
             if (!FJsonEquivalent(before.GetProperty(key), after.GetProperty(key))) throw new InvalidOperationException("Family metadata changed after saving: " + key);
         if (before.GetProperty("parameters").GetRawText() != after.GetProperty("parameters").GetRawText()) throw new InvalidOperationException("Parameter definitions changed after saving/reopening.");
+        foreach (var key in new[] { "untyped", "nestedFamilies", "nested", "referencePlanes", "materials", "subcategories" })
+            if (!FJsonEquivalent(before.GetProperty(key),after.GetProperty(key))) throw new InvalidOperationException("Family contents changed after saving/reopening: "+key);
         var types = after.GetProperty("types").EnumerateArray().ToDictionary(t => FString(t, "name"));
         if (types.Count != before.GetProperty("types").GetArrayLength()) throw new InvalidOperationException("Type count changed after saving.");
         foreach (var original in before.GetProperty("types").EnumerateArray())
@@ -53,14 +55,7 @@ internal static partial class RevitTools
                 || !FJsonEquivalent(original.GetProperty("geometry"), actual.GetProperty("geometry"))) throw new InvalidOperationException("Values, geometry or connectors changed after saving type " + FString(original, "name"));
         }
     }
-    private static bool FJsonEquivalent(JsonElement a, JsonElement b)
-    {
-        if (a.ValueKind != b.ValueKind) return false;
-        if (a.ValueKind == JsonValueKind.Number) return Math.Abs(a.GetDouble() - b.GetDouble()) <= 1e-8 * Math.Max(1, Math.Abs(a.GetDouble()));
-        if (a.ValueKind == JsonValueKind.Array) return a.GetArrayLength() == b.GetArrayLength() && a.EnumerateArray().Zip(b.EnumerateArray()).All(p => FJsonEquivalent(p.First, p.Second));
-        if (a.ValueKind == JsonValueKind.Object) return a.EnumerateObject().Count() == b.EnumerateObject().Count() && a.EnumerateObject().All(p => b.TryGetProperty(p.Name, out var v) && FJsonEquivalent(p.Value, v));
-        return a.GetRawText() == b.GetRawText();
-    }
+    private static bool FJsonEquivalent(JsonElement a, JsonElement b) => FamilyReloadComparison.Equivalent(a,b);
     private static object FTestConnections(UIApplication app, string path, JsonElement validation, JsonElement familySnapshot, Func<bool>? cancelled)
     {
         Document? project = null;
@@ -129,13 +124,21 @@ internal static partial class RevitTools
                     if (!connector.IsConnectedTo(end)) throw new InvalidOperationException("ConnectTo did not establish a physical connection.");
                     if (connector.Origin.DistanceTo(origin) > FFeet(.0001) || connector.CoordinateSystem.BasisZ.DotProduct(normal) < 1 - 1e-6)
                         throw new InvalidOperationException("ConnectTo changed the family connector position or orientation.");
-                    results.Add(new { type = symbol.Name, familyConnectorId = source.GetProperty("id").GetInt64(), connected = true, frame = FFrameInfo(connector.CoordinateSystem) });
+                    results.Add(new { type = symbol.Name, familyConnectorId = source.GetProperty("id").GetInt64(), connected = true, frame = FFrameInfo(connector.CoordinateSystem),
+                        expectedSystemTypeId=system.Id.Value,expectedSystemClassification=classification.ToString(),
+                        nativeSystems=FamilyNativeSystemParameters(instance),
+                        nativeConnectorSystemId=connector.MEPSystem?.Id.Value,nativeConnectorSystemName=connector.MEPSystem?.Name,
+                        nativeConnectorSystemTypeId=connector.MEPSystem?.GetTypeId().Value,
+                        systemTypeMatches=connector.MEPSystem?.GetTypeId()==system.Id,
+                        nativeDuctSystemId=end.MEPSystem?.Id.Value,nativeDuctSystemTypeId=end.MEPSystem?.GetTypeId().Value,
+                        flowInternal=connector.Flow });
                     connector.DisconnectFrom(end); project.Delete(duct.Id);
                 }
                 project.Delete(instance.Id);
             }
             CommitCheckedTransaction(tx, cancelled);
-            return new { passed = true, checkedConnectors = results.Count, results };
+            return new { passed = true, checkedConnectors = results.Count, results,
+                note="passed confirms geometry and physical ConnectTo only; review systemTypeMatches and native system/flow fields separately." };
         }
         finally { FClose(project); }
     }

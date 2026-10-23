@@ -98,13 +98,13 @@ internal static partial class RevitTools
         tx.RollBack();
         return JsonSerializer.SerializeToElement(new { category = doc.OwnerFamily.FamilyCategory?.Name, categoryId = doc.OwnerFamily.FamilyCategory?.Id.Value,
             placement = doc.OwnerFamily.FamilyPlacementType.ToString(), shared = doc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED)?.AsInteger() == 1,
-            parameters, types = snapshots, untyped, materials = new FilteredElementCollector(doc).OfClass(typeof(Material)).Cast<Material>().Select(m => new { id = m.Id.Value, name = m.Name }).ToArray(),
-            subcategories = doc.OwnerFamily.FamilyCategory?.SubCategories.Cast<Category>().Select(c => new { id = c.Id.Value, name = c.Name, materialId = c.Material?.Id.Value }).ToArray(),
+            parameters, types = snapshots, untyped, materials = new FilteredElementCollector(doc).OfClass(typeof(Material)).Cast<Material>().OrderBy(m => m.Id.Value).Select(m => new { id = m.Id.Value, name = m.Name }).ToArray(),
+            subcategories = doc.OwnerFamily.FamilyCategory?.SubCategories.Cast<Category>().OrderBy(c => c.Id.Value).Select(c => new { id = c.Id.Value, name = c.Name, materialId = c.Material?.Id.Value }).ToArray(),
             views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).Select(v => new { id = v.Id.Value, name = v.Name, kind = v.ViewType.ToString() }).ToArray(),
-            referencePlanes = new FilteredElementCollector(doc).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>().Select(p => new { id = p.Id.Value, name = p.Name, bubble = FCoordinates(p.BubbleEnd), free = FCoordinates(p.FreeEnd), normal = FCoordinates(p.Normal, false) }).ToArray(),
-            nestedFamilies = new FilteredElementCollector(doc).OfClass(typeof(Family)).Cast<Family>().Where(f => f.Id != doc.OwnerFamily.Id).Select(f => new { id = f.Id.Value, name = f.Name,
-                types = f.GetFamilySymbolIds().Select(id => new { id = id.Value, name = doc.GetElement(id).Name }).ToArray() }).ToArray(),
-            nested = new FilteredElementCollector(doc).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>().Select(i => new { id = i.Id.Value, familyId = i.Symbol.Family.Id.Value, symbolId = i.Symbol.Id.Value, family = i.Symbol.FamilyName, type = i.Symbol.Name, frame = FFrameInfo(i.GetTransform()), shared = i.Symbol.Family.get_Parameter(BuiltInParameter.FAMILY_SHARED)?.AsInteger() == 1 }).ToArray() });
+            referencePlanes = new FilteredElementCollector(doc).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>().OrderBy(p => p.Id.Value).Select(p => new { id = p.Id.Value, name = p.Name, bubble = FCoordinates(p.BubbleEnd), free = FCoordinates(p.FreeEnd), normal = FCoordinates(p.Normal, false) }).ToArray(),
+            nestedFamilies = new FilteredElementCollector(doc).OfClass(typeof(Family)).Cast<Family>().Where(f => f.Id != doc.OwnerFamily.Id).OrderBy(f => f.Id.Value).Select(f => new { id = f.Id.Value, name = f.Name,
+                types = f.GetFamilySymbolIds().OrderBy(id => id.Value).Select(id => new { id = id.Value, name = doc.GetElement(id).Name }).ToArray() }).ToArray(),
+            nested = new FilteredElementCollector(doc).OfClass(typeof(FamilyInstance)).Cast<FamilyInstance>().OrderBy(i => i.Id.Value).Select(i => new { id = i.Id.Value, familyId = i.Symbol.Family.Id.Value, symbolId = i.Symbol.Id.Value, family = i.Symbol.FamilyName, type = i.Symbol.Name, frame = FFrameInfo(i.GetTransform()), shared = i.Symbol.Family.get_Parameter(BuiltInParameter.FAMILY_SHARED)?.AsInteger() == 1 }).ToArray() });
     }
     private static object? FParameterValue(FamilyType type, FamilyParameter p)
     {

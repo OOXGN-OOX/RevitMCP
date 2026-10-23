@@ -58,19 +58,43 @@ internal static partial class RevitTools
         var bound = JsonNode.Parse(args.GetRawText())!.AsObject();
         bound["path"] = path;
         bound["sha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
-        return PreviewOperation(app, JsonSerializer.SerializeToElement(bound), "loadFamily", "Загрузка локального семейства", LoadFamilyOperation);
+        return PreviewOperation(app, JsonSerializer.SerializeToElement(bound), "loadFamily", "Загрузка локального семейства", LoadFamilyOperation, ValidateFamilyLoadAfterCommit);
     }
     private static object ApplyLoadFamily(UIApplication app, JsonElement args, Func<bool>? cancelled) =>
-        ApplyOperation(app, args, "loadFamily", "Загрузить проверенное локальное семейство?", LoadFamilyOperation, cancelled);
+        ApplyOperation(app, args, "loadFamily", "Загрузить проверенное локальное семейство?", LoadFamilyOperation, cancelled, ValidateFamilyLoadAfterCommit);
     private static object LoadFamilyOperation(Document document, JsonElement args)
     {
         var path = AuthoringFilePath(args, "path", ".rfa", true);
         if (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) != JsonTools.GetString(args, "sha256"))
             throw new InvalidOperationException("The family file changed after preview.");
-        if (!document.LoadFamily(path, new FamilyLoadPolicy(FString(args, "parameterPolicy"), FString(args, "sharedFamilySource")), out var family) || family is null)
-            throw new InvalidOperationException("Revit could not load this family, it is unchanged, or replacement was rejected by parameterPolicy.");
-        return new { familyId = family.Id.Value, family = family.Name, sourcePath = path,
-            types = family.GetFamilySymbolIds().Select(id => new { id = id.Value, name = document.GetElement(id).Name }).ToArray() };
+        var existing=new FilteredElementCollector(document).OfClass(typeof(Family)).Cast<Family>()
+            .Where(f=>f.Name==Path.GetFileNameWithoutExtension(path)).ToArray();
+        if(existing.Length>1) throw new ArgumentException("Existing family name is ambiguous.");
+        if(existing.Length==1 && FString(args,"parameterPolicy")=="rejectExisting") throw new ArgumentException("Family already exists; parameterPolicy rejects replacement.");
+        JsonElement? before=existing.Length==1 ? FamilyInstanceState(document,existing[0]) : null;
+        var policy=new FamilyLoadPolicy(FString(args,"parameterPolicy"),FString(args,"sharedFamilySource"));
+        var loaded=document.LoadFamily(path,policy,out var family);
+        if(policy.Rejected) throw new InvalidOperationException("Family replacement was rejected by parameterPolicy.");
+        // Revit returns false with a null family when an exact copy needs no reload.
+        family ??= existing.SingleOrDefault();
+        if ((!loaded && existing.Length==0) || family is null) throw new InvalidOperationException("Revit could not load this family.");
+        document.Regenerate();
+        return new { familyId = family.Id.Value, family = family.Name, sourcePath = path, loaded, unchanged=!loaded,
+            types = family.GetFamilySymbolIds().Select(id => new { id = id.Value, name = document.GetElement(id).Name }).ToArray(),
+            before, after=FamilyInstanceState(document,family), preservationPassed=false, verificationStage="beforeCommit" };
+    }
+
+    private static JsonElement ValidateFamilyLoadAfterCommit(Document doc,JsonElement args,JsonElement result)
+    {
+        var family=doc.GetElement(new ElementId(result.GetProperty("familyId").GetInt64())) as Family
+            ?? throw new InvalidOperationException("Family disappeared during load commit.");
+        var after=FamilyInstanceState(doc,family);
+        if(result.GetProperty("before").ValueKind!=JsonValueKind.Null) RequireFamilyStatePreserved(result.GetProperty("before"),after);
+        var values=JsonNode.Parse(result.GetRawText())!.AsObject();
+        values["after"]=JsonNode.Parse(after.GetRawText());
+        values["preservationPassed"]=true;
+        values["verificationStage"]="afterCommit";
+        return JsonSerializer.SerializeToElement(values);
     }
 
     private static object PreviewCreateRoomSeparators(UIApplication app, JsonElement args) =>
