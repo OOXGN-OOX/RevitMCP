@@ -37,8 +37,11 @@ test('HVAC connector schema requires matching shape dimensions and orthogonal fr
   const connector = {action:'createHvacConnector', key:'outlet',hostFace:{element:{id:12},normal:frame.basisZ},shape:'Round',system:'SupplyAir',flowDirection:'Out',frame,diameterMeters:.2};
   const check = op => valid('preview_build_family',{...plan,operations:[op]});
   assert.ok(check(connector));
+  assert.ok(check({...connector,system:'Global'}));
+  const {key,hostFace,...editable}=connector;
+  assert.ok(check({...editable,action:'editHvacConnector',element:{id:12},system:'Global'}));
   assert.ok(check({...connector,shape:'Rectangular',diameterMeters:undefined,widthMeters:.4,heightMeters:.2}));
-  for (const op of [{...connector,diameterMeters:undefined}, {...connector,widthMeters:.4}, {...connector,diameterMeters:-1}, {...connector,frame:{...frame,basisX:frame.basisZ}}, {...connector,frame:{...frame,basisZ:{x:0,y:0,z:0}}}]) assert.equal(check(op),false);
+  for (const op of [{...connector,diameterMeters:undefined}, {...connector,widthMeters:.4}, {...connector,diameterMeters:-1}, {...connector,system:'UndefinedSystemType'}, {...connector,frame:{...frame,basisX:frame.basisZ}}, {...connector,frame:{...frame,basisZ:{x:0,y:0,z:0}}}]) assert.equal(check(op),false);
 });
 test('family values and bindings reject ambiguous selectors', () => {
   const value = {parameter:{name:'Width'},value:200,unitId:'autodesk.unit.unit:millimeters-1.0.1'};

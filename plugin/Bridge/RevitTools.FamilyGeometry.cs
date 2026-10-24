@@ -108,6 +108,12 @@ internal static partial class RevitTools
         var doc = ctx.Document; ConnectorElement connector;
         var shape = Enum.Parse<ConnectorProfileType>(FString(op, "shape"));
         var system = Enum.Parse<DuctSystemType>(FString(op, "system"));
+        var classification=system switch {
+            DuctSystemType.SupplyAir=>MEPSystemClassification.SupplyAir, DuctSystemType.ReturnAir=>MEPSystemClassification.ReturnAir,
+            DuctSystemType.ExhaustAir=>MEPSystemClassification.ExhaustAir, DuctSystemType.OtherAir=>MEPSystemClassification.OtherAir,
+            DuctSystemType.Global=>MEPSystemClassification.Global,
+            _=>throw new ArgumentException("Unsupported HVAC connector system classification.") };
+        var originalId=create ? ElementId.InvalidElementId : ctx.Get(op.GetProperty("element")).Id;
         if (create)
         {
             connector = ConnectorElement.CreateDuctConnector(doc, system, shape, FHostFace(ctx, op.GetProperty("hostFace")).Reference);
@@ -119,7 +125,8 @@ internal static partial class RevitTools
             if (connector.Domain != Domain.DomainHvac) throw new ArgumentException("Expected an HVAC connector.");
             if (connector.Shape != shape) throw new ArgumentException("Changing connector shape requires deleteElement and createHvacConnector with explicit new bindings.");
             if (op.TryGetProperty("hostFace", out var face)) connector.ChangeHostReference(FHostFace(ctx, face).Reference);
-            connector.SystemClassification = system switch { DuctSystemType.SupplyAir => MEPSystemClassification.SupplyAir, DuctSystemType.ReturnAir => MEPSystemClassification.ReturnAir, DuctSystemType.ExhaustAir => MEPSystemClassification.ExhaustAir, _ => MEPSystemClassification.OtherAir };
+            if(!connector.IsSystemClassificationValid(classification)) throw new ArgumentException("The requested classification is not valid for this connector.");
+            connector.SystemClassification = classification;
         }
         doc.Regenerate();
         var desired = FFrame(op.GetProperty("frame")); var current = connector.CoordinateSystem;
@@ -145,6 +152,8 @@ internal static partial class RevitTools
         var sizesMatch = shape == ConnectorProfileType.Round ? Math.Abs(FMeters(connector.Radius * 2) - FNumber(op, "diameterMeters")) < .0001
             : Math.Abs(FMeters(connector.Width) - FNumber(op, "widthMeters")) < .0001 && Math.Abs(FMeters(connector.Height) - FNumber(op, "heightMeters")) < .0001;
         if (!sizesMatch || flow.AsInteger() != (int)Enum.Parse<FlowDirectionType>(FString(op, "flowDirection"))) throw new InvalidOperationException("Connector dimensions or flow direction differ after regeneration/binding.");
+        if(connector.SystemClassification!=classification || (!create && connector.Id!=originalId))
+            throw new InvalidOperationException("Revit did not retain the requested HVAC system classification or the existing connector ID.");
     }
     private sealed class FamilyLoadPolicy(string parameterPolicy, string sharedSource) : IFamilyLoadOptions
     {

@@ -15,7 +15,7 @@ const visibility = z.object({ visible: z.boolean().optional(), coarse: z.boolean
 const face = z.object({ element, normal: vector, origin: point.optional() }).strict();
 const binding = z.object({ builtInParameter: name, parameter }).strict();
 const connectorFields = {
-  shape: z.enum(['Round','Rectangular','Oval']), system: z.enum(['SupplyAir','ReturnAir','ExhaustAir','OtherAir']),
+  shape: z.enum(['Round','Rectangular','Oval']), system: z.enum(['SupplyAir','ReturnAir','ExhaustAir','OtherAir','Global']),
   flowDirection: z.enum(['In','Out','Bidirectional']), frame,
   diameterMeters: number.positive().max(10).optional(), widthMeters: number.positive().max(10).optional(), heightMeters: number.positive().max(10).optional(),
   bindings: z.array(binding).max(20).default([]), primary: z.boolean().default(false)

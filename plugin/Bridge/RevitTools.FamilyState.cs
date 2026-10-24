@@ -24,7 +24,7 @@ internal static partial class RevitTools
                 connectors=FamilyConnectorState(i) };
         }).ToArray();
         return JsonSerializer.SerializeToElement(new { familyId=family.Id.Value, family=family.Name,
-            types=family.GetFamilySymbolIds().OrderBy(id=>id.Value).Select(id=>new { id=id.Value, name=doc.GetElement(id).Name }).ToArray(), instances=rows });
+            types=family.GetFamilySymbolIds().OrderBy(id=>id.Value).Select(id=>new { id=id.Value, uniqueId=doc.GetElement(id).UniqueId, name=doc.GetElement(id).Name }).ToArray(), instances=rows });
     }
 
     private static object[] FamilyNativeSystemParameters(Element element) => new[] {
@@ -61,11 +61,26 @@ internal static partial class RevitTools
             }).ToArray() };
     }).ToArray() ?? [];
 
-    private static void RequireFamilyStatePreserved(JsonElement before, JsonElement after)
+    private static FamilyReloadComparison.Report RequireFamilyStatePreserved(JsonElement before, JsonElement after)
     {
-        // New types are allowed on ordinary reload; all previously existing types must keep their IDs/names.
-        if (!FamilyReloadComparison.Preserved(before,after))
-            throw new RevitOperationException("Reload changed existing family/type/instance IDs, placement, native systems or connector references. The operation was rolled back.",
-                new { before, after, preservationPassed=false });
+        var report=FamilyReloadComparison.Compare(before,after);
+        if (!report.Passed)
+            throw new RevitOperationException("Reload changed or removed existing types/instances, placement, native systems or connector references, or added unexpected root instances. The operation was rolled back.",
+                new { before, after, preservationPassed=false, preservation=report });
+        return report;
+    }
+
+    private static Family ResolveStateFamily(Document doc,JsonElement state)
+    {
+        // Family is a replaceable definition container. Symbols/instances retain the loaded identity.
+        var symbols=state.GetProperty("types").EnumerateArray().Select(t=>doc.GetElement(new ElementId(t.GetProperty("id").GetInt64())))
+            .OfType<FamilySymbol>().ToArray();
+        var families=symbols.Select(s=>s.Family).DistinctBy(f=>f.Id.Value).ToArray();
+        if(families.Length==1) return families[0];
+        if(families.Length>1) throw new InvalidOperationException("Existing family symbols now refer to different families.");
+        if(doc.GetElement(new ElementId(state.GetProperty("familyId").GetInt64())) is Family byId) return byId;
+        var matches=new FilteredElementCollector(doc).OfClass(typeof(Family)).Cast<Family>().Where(f=>f.Name==state.GetProperty("family").GetString()).ToArray();
+        if(matches.Length==1) return matches[0];
+        throw new InvalidOperationException("Cannot resolve the loaded family through existing symbols or an exact unambiguous name.");
     }
 }

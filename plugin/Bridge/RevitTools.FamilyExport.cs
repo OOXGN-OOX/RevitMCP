@@ -7,7 +7,7 @@ namespace RevitMCP;
 internal static partial class RevitTools
 {
     private sealed record FamilyExportPlan(bool Nested, JsonElement Args, DateTime Created, Document? Owner, long Revision,
-        string FamilyUniqueId, Dictionary<string,string> Hashes);
+        JsonElement FamilyIdentity, Dictionary<string,string> Hashes);
     private static readonly Dictionary<string,FamilyExportPlan> FamilyExportPlans = new();
 
     private static Family ExportSelectFamily(Document source, JsonElement args, bool nested)
@@ -39,7 +39,7 @@ internal static partial class RevitTools
         var preview=ExportFamilyCopy(app,args,nested,false,cancelled,null,()=>FVerifyDependencies(hashes));
         var id=Guid.NewGuid().ToString("N");
         FamilyExportPlans[id]=new(nested,args.Clone(),DateTime.UtcNow,owner,owner is null ? 0 : DocumentRevision(owner),
-            preview.GetProperty("familyUniqueId").GetString()!,hashes);
+            preview.GetProperty("familyIdentity").Clone(),hashes);
         return new { planCreated=true,planId=id,expiresInMinutes=10,modelChanged=false,outputCreated=false,preview };
     }
 
@@ -58,12 +58,12 @@ internal static partial class RevitTools
         using var dialog=new TaskDialog("Revit MCP") { MainInstruction="Выгрузить семейство в новый RFA?",MainContent=FString(plan.Args,"outputPath"),CommonButtons=TaskDialogCommonButtons.Yes|TaskDialogCommonButtons.No,DefaultButton=TaskDialogResult.No };
         if(cancelled?.Invoke()==true || !ConfirmOperation(dialog) || cancelled?.Invoke()==true) return new { applied=false,cancelled=true };
         Verify();
-        var result=ExportFamilyCopy(app,plan.Args,nested,true,cancelled,plan.FamilyUniqueId,Verify);
+        var result=ExportFamilyCopy(app,plan.Args,nested,true,cancelled,plan.FamilyIdentity,Verify);
         FamilyExportPlans.Remove(id);
         return new { applied=true,modelChanged=false,result };
     }
 
-    private static JsonElement ExportFamilyCopy(UIApplication app,JsonElement args,bool nested,bool publish,Func<bool>? cancelled,string? expectedUniqueId,Action verify)
+    private static JsonElement ExportFamilyCopy(UIApplication app,JsonElement args,bool nested,bool publish,Func<bool>? cancelled,JsonElement? expectedIdentity,Action verify)
     {
         var output=FPath(args,"outputPath",".rfa",false);
         if(File.Exists(output)||Directory.Exists(output)||!Directory.Exists(Path.GetDirectoryName(output))) throw new ArgumentException("Output must be a new RFA in an existing local directory.");
@@ -79,13 +79,20 @@ internal static partial class RevitTools
             if(cancelled?.Invoke()==true) throw new OperationCanceledException();
             source=nested ? FOpen(app,sourcePath!) : RequireDocument(app);
             if(source.IsReadOnly || source.IsModifiable) throw new InvalidOperationException("EditFamily requires a document without an open transaction or read-only state.");
-            var family=ExportSelectFamily(source,args,nested);
-            if(expectedUniqueId is not null && family.UniqueId!=expectedUniqueId) throw new InvalidOperationException("The selected family changed after preview.");
-            var familyId=family.Id.Value; var uniqueId=family.UniqueId; var familyName=family.Name;
+            var family=expectedIdentity.HasValue ? ResolveStateFamily(source,expectedIdentity.Value) : ExportSelectFamily(source,args,nested);
+            if(family.IsInPlace||!family.IsEditable) throw new ArgumentException("The family is no longer editable.");
+            var familyId=family.Id.Value; var familyName=family.Name;
             // Project reload is identified by file name; prevent exporting a misleading renamed replacement.
             if(!nested && !string.Equals(Path.GetFileNameWithoutExtension(output),familyName,StringComparison.Ordinal))
                 throw new ArgumentException("To preserve project family identity, outputPath file name must be exactly '"+familyName+".rfa'. Use a new directory for additional copies.");
             var sourceState=FamilyInstanceState(source,family);
+            var familyIdentity=JsonSerializer.SerializeToElement(new { familyId,family=familyName,types=sourceState.GetProperty("types") });
+            if(expectedIdentity.HasValue)
+            {
+                if(!FJsonEquivalent(expectedIdentity.Value.GetProperty("family"),familyIdentity.GetProperty("family"))
+                    || !FJsonEquivalent(expectedIdentity.Value.GetProperty("types"),familyIdentity.GetProperty("types")))
+                    throw new InvalidOperationException("The selected family symbols or their identity changed after preview.");
+            }
             edit=source.EditFamily(family);
             var before=FSnapshot(edit);
             var staged=Path.Combine(scratch,familyName+".rfa");
@@ -94,10 +101,15 @@ internal static partial class RevitTools
             var verified=FValidate(app,staged,JsonSerializer.SerializeToElement(new {}),before,cancelled);
             var loadArgs=JsonSerializer.SerializeToElement(new { path=staged,sha256=FHash(staged),parameterPolicy="preserve",sharedFamilySource="project" });
             var roundTrip=SimulateOperation(source,loadArgs,"Контрольная обратная загрузка семейства",LoadFamilyOperation,ValidateFamilyLoadAfterCommit);
-            RequireFamilyStatePreserved(sourceState,FamilyInstanceState(source,(Family)source.GetElement(new ElementId(familyId))));
+            var rolledBackState=FamilyInstanceState(source,ResolveStateFamily(source,sourceState));
+            RequireFamilyStatePreserved(sourceState,rolledBackState);
+            // Additions are expected during a reload, but none may remain after its transaction group is rolled back.
+            if(!FJsonEquivalent(sourceState.GetProperty("types"),rolledBackState.GetProperty("types"))
+                || sourceState.GetProperty("instances").GetArrayLength()!=rolledBackState.GetProperty("instances").GetArrayLength())
+                throw new InvalidOperationException("The round-trip rollback left additional family types or instances in the source document.");
             if(cancelled?.Invoke()==true) throw new OperationCanceledException();
             verify();
-            var result=JsonSerializer.SerializeToElement(new { outputPath=output,saved=publish,sourcePath,familyId,familyUniqueId=uniqueId,familyName,
+            var result=JsonSerializer.SerializeToElement(new { outputPath=output,saved=publish,sourcePath,familyId=rolledBackState.GetProperty("familyId").GetInt64(),familyUniqueId=ResolveStateFamily(source,sourceState).UniqueId,familyName,familyIdentity,
                 reloadFileName=familyName+".rfa",roundTripPassed=true,roundTrip,verified,modelChanged=false });
             // Close every temporary document before publishing; a close failure must not leave a reported-success output.
             if(nested) { FClose(source); source=null; }

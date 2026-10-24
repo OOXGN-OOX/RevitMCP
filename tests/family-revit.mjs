@@ -68,4 +68,31 @@ const reopened = await callRevit('validate_family_file',{path:edited,...editRequ
 await checkProjectPreview();
 assert.equal(reopened.passed,true);
 assert.equal(reopened.connections.checkedConnectors,4);
-console.log(JSON.stringify({passed:true,source,edited,originalHash,checkedConnectors:reopened.connections.checkedConnectors},null,2));
+
+// Global must survive native edit, SaveAs and reopen, while preserving existing connector identity and bindings.
+const current=await callRevit('read_family_file',{path:source});
+const originalPorts=current.types[0].connectors.filter(c=>c.domain==='DomainHvac');
+const globalPath=path.join(outputDirectory,'ConnectorFixtureGlobal.rfa');
+const globalOperations=originalPorts.flatMap(c=>[
+  {action:'associateParameter',element:{id:c.id},builtInParameter:'CONNECTOR_RADIUS',parameter:null},
+  {action:'editHvacConnector',element:{id:c.id},shape:c.shape,system:'Global',flowDirection:c.flowDirection,
+    frame:{origin:c.frame.origin,basisX:c.frame.basisX,basisZ:c.frame.basisZ},diameterMeters:c.diameterMeters,primary:c.primary},
+  {action:'associateParameter',element:{id:c.id},builtInParameter:'CONNECTOR_RADIUS',parameter:{name:'Radius'}}
+]);
+const global=await callRevit('preview_build_family',{sourcePath:source,outputPath:globalPath,operations:globalOperations});
+const globalPorts=global.preview.verified.family.types[0].connectors.filter(c=>c.domain==='DomainHvac');
+assert.deepEqual(globalPorts.map(c=>c.id),originalPorts.map(c=>c.id));
+for(let i=0;i<globalPorts.length;i++) {
+  const port=globalPorts[i],before=originalPorts[i];
+  assert.equal(port.system,'Global','Global must not silently become OtherAir after saving/reopening');
+  for(const field of ['uniqueId','shape','frame','diameterMeters','flowDirection','flowConfiguration','primary','linkedConnectorElementId'])
+    assert.deepEqual(port[field],before[field],`Editing classification must preserve ${field}`);
+  assert.deepEqual(port.parameters.map(p=>({id:p.id,familyParameterId:p.familyParameterId})),before.parameters.map(p=>({id:p.id,familyParameterId:p.familyParameterId})));
+}
+assert.ok(await missing(globalPath),'Global preview must not publish its output');
+const createdGlobal=await callRevit('preview_build_family',{templatePath,outputPath:path.join(outputDirectory,'CreatedGlobal.rfa'),
+  operations:request.operations.map(op=>op.action==='createHvacConnector'?{...op,system:'Global'}:op),
+  validation:{expected:request.validation.expected}});
+assert.ok(createdGlobal.preview.verified.family.types[0].connectors.every(c=>c.system==='Global'),'New Global connectors must also survive saving/reopening');
+assert.equal(await hash(source),originalHash);
+console.log(JSON.stringify({passed:true,source,edited,originalHash,checkedConnectors:reopened.connections.checkedConnectors,globalConnectorIds:globalPorts.map(c=>c.id)},null,2));

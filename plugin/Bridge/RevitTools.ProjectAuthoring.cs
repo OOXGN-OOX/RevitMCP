@@ -86,12 +86,13 @@ internal static partial class RevitTools
 
     private static JsonElement ValidateFamilyLoadAfterCommit(Document doc,JsonElement args,JsonElement result)
     {
-        var family=doc.GetElement(new ElementId(result.GetProperty("familyId").GetInt64())) as Family
-            ?? throw new InvalidOperationException("Family disappeared during load commit.");
+        var family=ResolveStateFamily(doc,result.GetProperty("after"));
         var after=FamilyInstanceState(doc,family);
-        if(result.GetProperty("before").ValueKind!=JsonValueKind.Null) RequireFamilyStatePreserved(result.GetProperty("before"),after);
+        var preservation=result.GetProperty("before").ValueKind!=JsonValueKind.Null ? RequireFamilyStatePreserved(result.GetProperty("before"),after) : null;
         var values=JsonNode.Parse(result.GetRawText())!.AsObject();
+        values["familyId"]=family.Id.Value;
         values["after"]=JsonNode.Parse(after.GetRawText());
+        values["preservation"]=JsonSerializer.SerializeToNode(preservation,JsonTools.SerializerOptions);
         values["preservationPassed"]=true;
         values["verificationStage"]="afterCommit";
         return JsonSerializer.SerializeToElement(values);
