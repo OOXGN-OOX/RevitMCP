@@ -19,6 +19,7 @@
 | Новые типоразмеры | `preview_duplicate_family_types` / `apply_duplicate_family_types` |
 | Имя семейства или типоразмера | `preview_rename_family` / `apply_rename_family` |
 | MEP-коннекторы | `list_mep_connectors`, `preview_connect_mep` / `apply_connect_mep` |
+| Гибкие подводки | `list_mep_types.flexPipeTypes`, `preview_create_mep` с `kind: "flexPipe"` / `apply_create_mep`; [траектория и подключение](MEP.md) |
 | Разработка RFA | `read_family_file`, `read_family_type_catalog`, `preview_build_family` / `apply_build_family`, `validate_family_file` |
 | Выгрузка RFA из проекта/вложения | `preview_export_family` / `apply_export_family`, `preview_export_nested_family` / `apply_export_nested_family`; [проверки и ограничения](FAMILY-EXPORT.md) |
 | Загрузка локального RFA | `preview_load_family` / `apply_load_family` |

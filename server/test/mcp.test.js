@@ -51,6 +51,9 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   for (const name of ['preview_place_hosted_families', 'apply_create_dimensions', 'preview_tag_rooms', 'apply_color_by_parameter'])
     assert.ok(names.includes(name), `Missing tool ${name}`);
   const deletion = tools.find(tool => tool.name === 'apply_delete_plan');
+  const mepItems=tools.find(tool=>tool.name==='preview_create_mep').inputSchema.properties.segments.items;
+  const flexSchema=(mepItems.anyOf??mepItems.oneOf??[]).find(s=>s.properties?.kind?.const==='flexPipe');
+  assert.equal(flexSchema?.properties?.points?.maxItems,100,'The public MCP contract must expose flexible path points');
   const parameter=tools.find(tool=>tool.name==='preview_set_parameter');
   assert.equal(parameter.inputSchema.properties.elementIdValue.maximum,Number.MAX_SAFE_INTEGER);
   assert.ok(parameter.inputSchema.properties.parameterScope);
@@ -149,6 +152,23 @@ test('MEP contracts require a valid segment and matching size shape', () => {
   for (const bad of [{ end: point(0) }, { diameterMeters: 0 },
     { widthMeters: 0.2 }, { kind: 'duct', widthMeters: 0.2, heightMeters: 0.2 }])
     assert.equal(parse('preview_create_mep', { segments: [{ ...pipe, ...bad }] }), false);
+});
+
+test('flex pipe contracts require a bounded path and explicit flexible type references',()=>{
+  const point=(x,y=0,z=0)=>({xMeters:x,yMeters:y,zMeters:z});
+  const flex={kind:'flexPipe',typeId:1,systemTypeId:2,levelId:3,diameterMeters:.015,points:[point(0),point(.3,.2),point(.6,0)]};
+  assert.ok(parse('preview_create_mep',{segments:[flex]}));
+  assert.ok(parse('preview_create_mep',{segments:[{...flex,startTangent:{x:1,y:0,z:0}}]}));
+  assert.ok(parse('preview_create_mep',{segments:[{...flex,endTangent:{x:0,y:0,z:-1}}]}));
+  const rigid={kind:'pipe',typeId:1,systemTypeId:2,levelId:3,start:point(0),end:point(1),diameterMeters:.02};
+  assert.ok(parse('preview_create_mep',{segments:[rigid,flex]}));
+  for(const change of [{kind:'flexDuct'},{typeId:0},{points:[]},{points:[point(0)]},{points:[point(0),point(0)]},
+    {points:[point(0),point(.001)]},{points:[point(0),point(1),point(0)]},{points:[point(0),point(301)]},
+    {points:Array.from({length:101},(_,i)=>point(i))},{points:[point(0),point(Infinity)]},
+    {diameterMeters:undefined},{widthMeters:.1},{start:point(0)},{startTangent:{x:0,y:0,z:0}},
+    {endTangent:{x:1e7,y:0,z:0}},{startConnector:{elementId:100,connectorId:1}}])
+    assert.equal(parse('preview_create_mep',{segments:[{...flex,...change}]}),false);
+  assert.equal(parse('apply_create_mep',{planId:'plan',segments:[flex]}),false);
 });
 
 test('MEP connections require explicit fitting and distinct valid connector owners', () => {

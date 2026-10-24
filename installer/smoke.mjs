@@ -27,6 +27,9 @@ try {
   if (listing.error || !listing.result?.tools?.length) throw new Error('Missing MCP tools');
   if(!listing.result.tools.find(t=>t.name==='preview_set_parameter')?.inputSchema?.properties?.elementIdValue
     ||!listing.result.tools.some(t=>t.name==='get_parameter_value_options')) throw new Error('Packaged server is missing ElementId parameter contracts');
+  const mepItems=listing.result.tools.find(t=>t.name==='preview_create_mep')?.inputSchema?.properties?.segments?.items;
+  if(!(mepItems?.anyOf??mepItems?.oneOf??[]).some(s=>s.properties?.kind?.const==='flexPipe'&&s.properties?.points?.maxItems===100))
+    throw new Error('Packaged server is missing flexible pipe contracts');
   const result = { server: hello.result.serverInfo, tools: listing.result.tools.length };
   if (tool) {
     if (!['revit_ping', 'get_project_info'].includes(tool)) throw new Error('Smoke probe permits read-only tools only');

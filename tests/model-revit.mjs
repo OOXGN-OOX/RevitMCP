@@ -27,11 +27,23 @@ for(const id of config.elementIds??[]) {
 for(const request of config.previews??[]) {
   if(!['preview_move_elements','preview_rotate_elements','preview_change_element_types','preview_create_schedule',
     'preview_modify_schedule','preview_edit_sheet','preview_override_graphics','preview_isolate_annotations',
-    'preview_tag_elements','preview_create_sections','preview_create_sheets'].includes(request.tool))
+    'preview_tag_elements','preview_create_sections','preview_create_sheets','preview_create_mep'].includes(request.tool))
     throw new Error(`Not an allowed preview: ${request.tool}`);
   const result=await call(request.tool,request.arguments);
   assert.equal(result.planCreated,true,request.tool);
   assert.equal(result.modelChanged,false,request.tool);
+  if(request.tool==='preview_create_mep') {
+    for(const [index,input] of request.arguments.segments.entries()) {
+      if(input.kind!=='flexPipe') continue;
+      const pipe=result.preview.result.segments[index];
+      assert.equal(pipe.kind,'flexPipe');assert.equal(pipe.typeId,input.typeId);
+      assert.equal(pipe.systemTypeId,input.systemTypeId);assert.equal(pipe.levelId,input.levelId);
+      assert.ok(Math.abs(pipe.diameterMeters-input.diameterMeters)<.00001);
+      assert.ok(pipe.lengthMeters>=.01-1e-8&&pipe.lengthMeters<=300+1e-8);
+      assert.equal(pipe.connectors.length,2);
+      for(const c of pipe.connectors) {assert.equal(c.domain,'DomainPiping');assert.equal(c.shape,'Round');assert.equal(c.isConnected,false);}
+    }
+  }
 }
 const after=await call('get_project_stats');
 assert.deepEqual(after,before,'Preview rollbacks must retain model counts.');

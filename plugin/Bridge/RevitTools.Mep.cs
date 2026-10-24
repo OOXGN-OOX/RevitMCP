@@ -15,6 +15,8 @@ internal static partial class RevitTools
         {
             pipeTypes = new FilteredElementCollector(doc).OfClass(typeof(PipeType)).Cast<PipeType>()
                 .Select(x => new { id = x.Id.Value, name = x.Name }).OrderBy(x => x.name).ToArray(),
+            flexPipeTypes = new FilteredElementCollector(doc).OfClass(typeof(FlexPipeType)).Cast<FlexPipeType>()
+                .Select(x => new { id = x.Id.Value, name = x.Name }).OrderBy(x => x.name).ToArray(),
             pipingSystems = new FilteredElementCollector(doc).OfClass(typeof(PipingSystemType)).Cast<PipingSystemType>()
                 .Select(x => new { id = x.Id.Value, name = x.Name }).OrderBy(x => x.name).ToArray(),
             ductTypes = new FilteredElementCollector(doc).OfClass(typeof(DuctType)).Cast<DuctType>()
@@ -27,10 +29,10 @@ internal static partial class RevitTools
     }
 
     private static object PreviewCreateMep(UIApplication app, JsonElement args) =>
-        PreviewOperation(app, args, "createMep", "Прямые трубы и воздуховоды", CreateMep);
+        PreviewOperation(app, args, "createMep", "Трубы и воздуховоды", CreateMep,ValidateCreatedMepAfterCommit);
 
     private static object ApplyCreateMep(UIApplication app, JsonElement args, Func<bool>? cancelled) =>
-        ApplyOperation(app, args, "createMep", "Создать трубы и воздуховоды?", CreateMep, cancelled);
+        ApplyOperation(app, args, "createMep", "Создать трубы и воздуховоды?", CreateMep, cancelled,ValidateCreatedMepAfterCommit);
 
     private static object CreateMep(Document doc, JsonElement args)
     {
@@ -40,6 +42,7 @@ internal static partial class RevitTools
         foreach (var request in requests.EnumerateArray())
         {
             var kind = JsonTools.GetString(request, "kind");
+            if(kind=="flexPipe") { created.Add(CreateFlexPipe(doc,request));continue; }
             var typeId = new ElementId(HostedReadId(request, "typeId"));
             var systemId = new ElementId(HostedReadId(request, "systemTypeId"));
             var levelId = new ElementId(HostedReadId(request, "levelId"));
@@ -76,7 +79,7 @@ internal static partial class RevitTools
                     SetMepSize(element, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM, BuildingNumber(request, "heightMeters", 0.001, 3));
                 }
             }
-            else throw new ArgumentException("kind must be pipe or duct.");
+            else throw new ArgumentException("kind must be pipe, duct or flexPipe.");
             created.Add(new { id = element.Id.Value, kind, typeId = typeId.Value, systemTypeId = systemId.Value,
                 levelId = levelId.Value, lengthMeters = UnitUtils.ConvertFromInternalUnits(length, UnitTypeId.Meters) });
         }

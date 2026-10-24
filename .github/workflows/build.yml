@@ -47,6 +47,8 @@ jobs:
         run: dotnet run --project tests/FamilyReload.Tests/FamilyReload.Tests.csproj -c Release
       - name: Test parameter value inputs
         run: dotnet run --project tests/ParameterValues.Tests/ParameterValues.Tests.csproj -c Release
+      - name: Test flexible pipe paths
+        run: dotnet run --project tests/MepFlexPath.Tests/MepFlexPath.Tests.csproj -c Release
       - name: Test hot update and rollback
         shell: pwsh
         run: ./tests/updates.ps1
