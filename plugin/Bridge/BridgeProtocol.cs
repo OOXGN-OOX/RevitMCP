@@ -28,10 +28,7 @@ internal sealed class ParameterPlan
     public string Id { get; init; } = "";
     public DateTime CreatedUtc { get; init; } = DateTime.UtcNow;
     public string Kind { get; init; } = "";
-    public List<long> ElementIds { get; init; } = [];
-    public string ParameterName { get; init; } = "";
     public string Value { get; init; } = "";
-    public Dictionary<long, string> OriginalValues { get; init; } = [];
     public List<LevelPlanItem> Levels { get; init; } = [];
     public List<WallPlanItem> Walls { get; init; } = [];
     public List<FamilyInstancePlanItem> FamilyInstances { get; init; } = [];

@@ -1,0 +1,12 @@
+import * as z from 'zod/v4';
+
+const id=z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+const signedId=z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).refine(v=>v!==0,'ID cannot be zero.');
+const selector={parameterName:z.string().trim().min(1).max(200).optional(),parameterId:signedId.optional(),parameterGuid:z.string().uuid().optional(),parameterScope:z.enum(['instance','type']).default('instance')};
+const exactSelector=args=>['parameterName','parameterId','parameterGuid'].filter(k=>args[k]!==undefined).length===1;
+const write={readOnlyHint:false,destructiveHint:false,openWorldHint:false};
+export function registerParameterTools(register) {
+  register('get_parameter_value_options','Получить допустимые ElementId для параметра: типы семейств, включая NestedFamilyTypeReference, или материалы. Точный параметр выбирается по имени, ID или GUID и области instance/type. Возвращает текущий ID, имена, принадлежность семейству и полноту списка. Для остальных ссылок используйте ID из соответствующих инструментов чтения.',z.object({elementId:id,...selector,offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(500).default(100)}).strict().refine(exactSelector,'Choose exactly one parameter selector.'));
+  register('preview_set_parameter','Проверить запись параметра реальной транзакцией с откатом. Для ElementId передайте elementIdValue — точный ID типа/элемента, либо его целочисленную запись в value. Проверяет применимость типа, значения после commit и неизменность владельцев. Для строк/чисел используйте value. В области type общие владельцы изменяются один раз; результат в preview.result.',z.object({elementIds:z.array(id).min(1).max(100).refine(ids=>new Set(ids).size===ids.length,'Duplicate element IDs.'),...selector,value:z.string().max(1000).optional(),elementIdValue:signedId.optional()}).strict().refine(exactSelector,'Choose exactly one parameter selector.').refine(v=>(v.value!==undefined)!==(v.elementIdValue!==undefined),'Choose value or elementIdValue.'),write);
+  register('apply_parameter_plan','Применить проверенный план параметра. Повторно проверить документ, ревизию, ID/UniqueId владельцев, исходные значения и типы ссылок; проверить значения после commit. При нарушении отменить всю группу транзакций. При autoConfirm=true окно подтверждения пропускается.',z.object({planId:z.string().min(1).max(80)}).strict(),write);
+}

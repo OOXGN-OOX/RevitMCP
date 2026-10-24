@@ -84,6 +84,7 @@ internal static partial class RevitTools
                 "get_element_properties" => GetElementProperties(application, args),
                 "select_elements" => SelectElements(application, args),
                 "preview_set_parameter" => PreviewSetParameter(application, args),
+                "get_parameter_value_options" => GetParameterValueOptions(application, args),
                 "apply_parameter_plan" => ApplyParameterPlan(application, args, isCancelled),
                 "preview_create_levels" => PreviewCreateLevels(application, args),
                 "apply_create_levels" => ApplyCreateLevels(application, args, isCancelled),
@@ -568,100 +569,6 @@ internal static partial class RevitTools
         var validIds = ids.Select(id => new ElementId(id)).Where(id => document.GetElement(id) is not null).ToList();
         app.ActiveUIDocument!.Selection.SetElementIds(validIds);
         return new { selectedCount = validIds.Count, missingCount = ids.Count - validIds.Count, selectedIds = validIds.Select(id => id.Value).ToList() };
-    }
-
-    private static object PreviewSetParameter(UIApplication app, JsonElement args)
-    {
-        var document = RequireDocument(app);
-        var ids = ReadRequestedIds(args);
-        var parameterName = JsonTools.GetString(args, "parameterName").Trim();
-        var value = JsonTools.GetString(args, "value");
-        if (parameterName.Length == 0) throw new ArgumentException("Parameter name cannot be empty.");
-
-        PrunePlans();
-        var originals = new Dictionary<long, string>();
-        var rows = new List<object>();
-        var skipped = new List<object>();
-        foreach (var id in ids)
-        {
-            var element = document.GetElement(new ElementId(id));
-            if (element is null) { skipped.Add(new { id, reason = "element not found" }); continue; }
-            var parameter = element.LookupParameter(parameterName);
-            if (parameter is null) { skipped.Add(new { id, reason = "parameter not found" }); continue; }
-            if (parameter.IsReadOnly) { skipped.Add(new { id, reason = "parameter is read-only" }); continue; }
-            if (parameter.StorageType == StorageType.ElementId) { skipped.Add(new { id, reason = "ElementId parameters are not supported by this MVP" }); continue; }
-            if (parameter.StorageType == StorageType.Integer && !int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
-            { skipped.Add(new { id, reason = "value is not an integer" }); continue; }
-
-            var oldValue = RawParameterValue(parameter);
-            originals[id] = oldValue;
-            rows.Add(new { id, element = element.Name, category = element.Category?.Name, parameter = parameterName, currentValue = DisplayParameterValue(parameter), proposedValue = value });
-        }
-
-        if (originals.Count == 0) return new { planCreated = false, changedCount = 0, skipped };
-        var planId = Guid.NewGuid().ToString("N");
-        Plans[planId] = new ParameterPlan
-        {
-            Id = planId,
-            Kind = "parameter", OwnerDocument = document, DocumentRevision = DocumentRevision(document),
-            ElementIds = originals.Keys.ToList(),
-            ParameterName = parameterName,
-            Value = value,
-            OriginalValues = originals
-        };
-        return new
-        {
-            planCreated = true,
-            planId,
-            expiresInMinutes = (int)PlanLifetime.TotalMinutes,
-            changedCount = originals.Count,
-            value,
-            note = "Строковые и целочисленные значения проверены. Дробное значение Revit разберёт по единицам проекта при подтверждении; ошибка отменит всю транзакцию.",
-            changes = rows.Take(30).ToList(),
-            omittedFromPreview = Math.Max(0, rows.Count - 30),
-            skipped
-        };
-    }
-
-    private static object ApplyParameterPlan(UIApplication app, JsonElement args, Func<bool>? isCancelled)
-    {
-        var document = RequireDocument(app);
-        var plan = GetPlan(JsonTools.GetString(args, "planId"), "parameter");
-        var preview = string.Join("\n", plan.ElementIds.Take(10).Select(id => $"Element {id}: {plan.OriginalValues.GetValueOrDefault(id)} → {plan.Value}"));
-        if (plan.ElementIds.Count > 10) preview += $"\n… и ещё {plan.ElementIds.Count - 10} элементов";
-        var dialog = new TaskDialog("Revit MCP")
-        {
-            MainInstruction = $"Изменить параметр «{plan.ParameterName}» у {plan.ElementIds.Count} элементов?",
-            MainContent = preview,
-            CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
-            DefaultButton = TaskDialogResult.No
-        };
-        if (!ConfirmOperation(dialog)) return new { applied = false, cancelled = true, changedCount = 0 };
-        if (isCancelled?.Invoke() == true) return new { applied = false, cancelled = true, changedCount = 0, reason = "MCP client cancelled while confirmation was open." };
-
-        using var transaction = new Transaction(document, "Revit MCP: изменение параметра");
-        ValidateLegacyPlan(plan, document);
-        BeginCheckedTransaction(transaction);
-        try
-        {
-            foreach (var id in plan.ElementIds)
-            {
-                var element = document.GetElement(new ElementId(id)) ?? throw new InvalidOperationException($"Element {id} was deleted after the preview.");
-                var parameter = element.LookupParameter(plan.ParameterName) ?? throw new InvalidOperationException($"Parameter '{plan.ParameterName}' no longer exists on element {id}.");
-                if (parameter.IsReadOnly) throw new InvalidOperationException($"Parameter '{plan.ParameterName}' became read-only on element {id}.");
-                if (!string.Equals(RawParameterValue(parameter), plan.OriginalValues[id], StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Element {id} changed after the preview. No values were applied; create a new preview.");
-                SetParameter(parameter, plan.Value, id);
-            }
-            CommitCheckedTransaction(transaction, isCancelled);
-            Plans.TryRemove(plan.Id, out _);
-            return new { applied = true, changedCount = plan.ElementIds.Count, parameter = plan.ParameterName, value = plan.Value, elementIds = plan.ElementIds };
-        }
-        catch
-        {
-            if (transaction.GetStatus() == TransactionStatus.Started) transaction.RollBack();
-            throw;
-        }
     }
 
     private static object PreviewCreateLevels(UIApplication app, JsonElement args)
@@ -1968,19 +1875,6 @@ internal static partial class RevitTools
     {
         try { return parameter.AsValueString() ?? RawParameterValue(parameter); }
         catch { return RawParameterValue(parameter); }
-    }
-
-    private static void SetParameter(Parameter parameter, string value, long elementId)
-    {
-        var changed = parameter.StorageType switch
-        {
-            StorageType.String => parameter.Set(value),
-            StorageType.Integer when int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) => parameter.Set(number),
-            StorageType.Integer => throw new InvalidOperationException($"Value '{value}' is not an integer for element {elementId}."),
-            StorageType.Double => parameter.SetValueString(value),
-            _ => throw new InvalidOperationException($"This parameter type cannot be changed by the MVP (element {elementId}).")
-        };
-        if (!changed) throw new InvalidOperationException($"Revit rejected the value for element {elementId}; the transaction was rolled back.");
     }
 
     private static Document RequireDocument(UIApplication app) => app.ActiveUIDocument?.Document

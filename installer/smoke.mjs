@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 const [nodePath, entry, tool] = process.argv.slice(2);
 if (!nodePath || !entry) throw new Error('Usage: smoke.mjs node.exe server/src/index.js [read-only tool]');
-const child = spawn(nodePath, [entry], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+const child = spawn(nodePath, [entry], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env:{...process.env,REVIT_MCP_ACCESS:'write'} });
 let buffer = '', stderr = '', nextId = 1;
 const pending = new Map();
 child.stderr.on('data', data => stderr += data);
@@ -25,6 +25,8 @@ try {
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const listing = await rpc('tools/list', {});
   if (listing.error || !listing.result?.tools?.length) throw new Error('Missing MCP tools');
+  if(!listing.result.tools.find(t=>t.name==='preview_set_parameter')?.inputSchema?.properties?.elementIdValue
+    ||!listing.result.tools.some(t=>t.name==='get_parameter_value_options')) throw new Error('Packaged server is missing ElementId parameter contracts');
   const result = { server: hello.result.serverInfo, tools: listing.result.tools.length };
   if (tool) {
     if (!['revit_ping', 'get_project_info'].includes(tool)) throw new Error('Smoke probe permits read-only tools only');

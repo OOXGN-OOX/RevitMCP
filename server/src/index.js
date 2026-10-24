@@ -1,4 +1,5 @@
 import { registerFamilyTools } from './family-tools.js';
+import { registerParameterTools } from './parameter-tools.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
@@ -106,12 +107,7 @@ register('get_element_properties', 'Получить свойства, габа�
   includeParameters: z.boolean().default(true)
 }));
 register('select_elements', 'Выбрать указанные элементы в интерфейсе Revit. Модель не меняется.', z.object({ elementIds }), { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
-register('preview_set_parameter', 'Подготовить предварительный просмотр пакетного изменения одного параметра. Ничего не меняет.', z.object({
-  elementIds,
-  parameterName: z.string().min(1).max(200),
-  value: z.string().max(1000)
-}));
-register('apply_parameter_plan', 'Показать подтверждение в Revit и применить ранее подготовленный план параметра. При autoConfirm=true в локальных настройках окно подтверждения пропускается.', z.object({ planId: z.string().min(1).max(80) }), { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+registerParameterTools(register);
 register('preview_create_levels', 'Проверить имена и отметки новых уровней. Ничего не создаёт.', z.object({
   levels: z.array(z.object({ name: z.string().min(1).max(100), elevationMeters: z.number().finite().min(-1000).max(10000) })).min(1).max(30)
 }));

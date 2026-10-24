@@ -51,6 +51,12 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   for (const name of ['preview_place_hosted_families', 'apply_create_dimensions', 'preview_tag_rooms', 'apply_color_by_parameter'])
     assert.ok(names.includes(name), `Missing tool ${name}`);
   const deletion = tools.find(tool => tool.name === 'apply_delete_plan');
+  const parameter=tools.find(tool=>tool.name==='preview_set_parameter');
+  assert.equal(parameter.inputSchema.properties.elementIdValue.maximum,Number.MAX_SAFE_INTEGER);
+  assert.ok(parameter.inputSchema.properties.parameterScope);
+  assert.equal(tools.find(tool=>tool.name==='get_parameter_value_options').annotations.readOnlyHint,true);
+  const invalidReference=await rpc('tools/call',{name:'preview_set_parameter',arguments:{elementIds:[1],parameterName:'Питание',value:'100',elementIdValue:100}});
+  assert.ok(invalidReference.error||invalidReference.result?.isError,'Ambiguous values must fail before bridge access');
   const documentation = tools.find(tool => tool.name === 'read_documentation');
   assert.ok(documentation, 'Reference capture needs a native documentation reader');
   assert.equal(documentation.annotations.readOnlyHint, true);

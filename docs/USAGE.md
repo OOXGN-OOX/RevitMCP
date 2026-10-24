@@ -14,6 +14,7 @@
 
 | Задача | Инструменты |
 | --- | --- |
+| Запись параметров, включая ElementId | `get_parameter_value_options`, `preview_set_parameter` / `apply_parameter_plan`; [формат значений](PARAMETERS.md) |
 | Двери и окна | `preview_place_hosted_families` / `apply_place_hosted_families` |
 | Новые типоразмеры | `preview_duplicate_family_types` / `apply_duplicate_family_types` |
 | Имя семейства или типоразмера | `preview_rename_family` / `apply_rename_family` |

@@ -78,10 +78,10 @@ internal static partial class RevitTools
     }
 
     private static object PreviewOperation(UIApplication app, JsonElement args, string kind, string summary,
-        Func<Document, JsonElement, object> operation, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
+        Func<Document, JsonElement, object> operation, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null,bool allowFamilyDocument=false)
     {
         var document = RequireDocument(app);
-        RequireWritableProject(document);
+        if(allowFamilyDocument) RequireWritableParameterDocument(document); else RequireWritableProject(document);
         var boundArgs = BindActiveView(app, args);
         var preview = SimulateOperation(document, boundArgs, summary, operation, afterCommit);
         PruneOperationPlans();
@@ -115,10 +115,10 @@ internal static partial class RevitTools
     }
 
     private static object ApplyOperation(UIApplication app, JsonElement args, string kind, string summary,
-        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null)
+        Func<Document, JsonElement, object> operation, Func<bool>? isCancelled, Func<Document, JsonElement, JsonElement, JsonElement>? afterCommit = null,bool allowFamilyDocument=false)
     {
         var document = RequireDocument(app);
-        RequireWritableProject(document);
+        if(allowFamilyDocument) RequireWritableParameterDocument(document); else RequireWritableProject(document);
         var plan = GetOperationPlan(document, JsonTools.GetString(args, "planId"), kind);
         // Deleting dependencies must be explicitly requested, independently of the Yes dialog.
         if (kind == "delete_checked")
