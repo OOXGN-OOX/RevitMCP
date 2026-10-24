@@ -9,11 +9,12 @@ internal static class FamilyReloadComparison
     internal sealed record TypeChange(long TypeId,string[] Fields,JsonElement Before,JsonElement After);
     internal sealed record Report(bool Passed,FamilyIdChange[] FamilyIdChanges,JsonElement[] AddedInstances,
         JsonElement[] RemovedInstances,InstanceChange[] ChangedInstances,JsonElement[] AddedTypes,
-        JsonElement[] RemovedTypes,TypeChange[] ChangedTypes,long[] UnexpectedAddedInstanceIds,string[] Issues);
+        JsonElement[] RemovedTypes,TypeChange[] ChangedTypes,long[] UnexpectedAddedInstanceIds,
+        long[] UnexpectedChangedInstanceIds,FamilyReloadExpectations.Match[] ExpectedChanges,string[] Issues);
 
     internal static bool Preserved(JsonElement before,JsonElement after) => Compare(before,after).Passed;
 
-    internal static Report Compare(JsonElement before,JsonElement after)
+    internal static Report Compare(JsonElement before,JsonElement after,JsonElement? expectedChanges=null)
     {
         var issues=new List<string>();
         Dictionary<long,JsonElement> Index(JsonElement state,string list,string key)
@@ -60,9 +61,13 @@ internal static class FamilyReloadComparison
             }
             return false;
         }
-        var unexpected=added.Where(row=>!ExpectedNested(row)).Select(row=>row.GetProperty("instanceId").GetInt64()).ToArray();
-        return new(issues.Count==0&&removed.Length==0&&changed.Length==0&&removedTypes.Length==0&&changedTypes.Length==0&&unexpected.Length==0,
-            familyIds.ToArray(),added,removed,changed,addedTypes,removedTypes,changedTypes,unexpected,issues.ToArray());
+        // An explicit contract targets a fixed set of existing instances, including their counts.
+        var unexpected=added.Where(row=>expectedChanges.HasValue||!ExpectedNested(row)).Select(row=>row.GetProperty("instanceId").GetInt64()).ToArray();
+        var expectations=FamilyReloadExpectations.Check(before,after,expectedChanges);
+        issues.AddRange(expectations.Issues);
+        var unexpectedChanges=changed.Where(row=>!expectations.Matches.Any(m=>m.InstanceId==row.InstanceId&&m.Passed)).Select(row=>row.InstanceId).ToArray();
+        return new(issues.Count==0&&removed.Length==0&&unexpectedChanges.Length==0&&removedTypes.Length==0&&changedTypes.Length==0&&unexpected.Length==0,
+            familyIds.ToArray(),added,removed,changed,addedTypes,removedTypes,changedTypes,unexpected,unexpectedChanges,expectations.Matches,issues.ToArray());
     }
 
     private static string[] ChangedFields(JsonElement before,JsonElement after,params string[] ignored) =>
@@ -80,6 +85,7 @@ internal static class FamilyReloadComparison
         }
         if(a.ValueKind==JsonValueKind.Array) return a.GetArrayLength()==b.GetArrayLength() && a.EnumerateArray().Zip(b.EnumerateArray()).All(p=>Equivalent(p.First,p.Second));
         if(a.ValueKind==JsonValueKind.Object) return a.EnumerateObject().Count()==b.EnumerateObject().Count() && a.EnumerateObject().All(p=>b.TryGetProperty(p.Name,out var v)&&Equivalent(p.Value,v));
+        if(a.ValueKind==JsonValueKind.String) return a.GetString()==b.GetString();
         return a.GetRawText()==b.GetRawText();
     }
 }

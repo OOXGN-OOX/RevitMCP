@@ -8,6 +8,18 @@ for (const register of [registerFamilyTools, registerAuthoringTools]) register((
 const valid = (tool, value) => schemas.get(tool).safeParse(value).success;
 const frame = { origin: {x:0,y:0,z:0}, basisX: {x:1,y:0,z:0}, basisZ: {x:0,y:0,z:1} };
 const plan = { sourcePath:'C:/Families/source.rfa', outputPath:'C:/Families/new.rfa', operations:[{action:'addType',name:'100'}] };
+test('family reload accepts bounded expected changes with exact instance identity', () => {
+  const request={path:'C:/Families/Unit.rfa',parameterPolicy:'preserve',sharedFamilySource:'file'};
+  const item={instanceId:10,uniqueId:'instance-a',nestedType:{before:{family:'Original',typeId:11,type:'A'},after:{family:'Prepared',type:'A'}},
+    systemClassification:{before:'Power',after:''},removeUnconnectedElectricalConnectors:[1]};
+  assert.ok(valid('preview_load_family',{...request,expectedChanges:[item]}));
+  assert.ok(valid('preview_load_family',{...request,expectedChanges:[{instanceId:12,uniqueId:'instance-b',connectorClassifications:[{connectorId:0,before:'SupplyAir',after:'UndefinedSystemType'}],logicalSystemReferences:[{connectorId:2,systemId:20}]}]}));
+  for(const expectedChanges of [[],[item,item],[{instanceId:10,uniqueId:'instance-a'}],[{...item,uniqueId:undefined}],
+    [{...item,ignorePlacement:true}],[{...item,removeUnconnectedElectricalConnectors:[1,1]}],
+    [{...item,connectorClassifications:[{connectorId:1,before:'SupplyAir',after:'SupplyAir'}]}]])
+    assert.equal(valid('preview_load_family',{...request,expectedChanges}),false);
+  assert.equal(valid('apply_load_family',{planId:'plan',expectedChanges:[item]}),false,'Apply must use the immutable preview contract');
+});
 test('family export requires exact, exclusive selectors and new absolute RFA paths', () => {
   const project={familyId:12,outputPath:'C:/Families/Unit.rfa'};
   const nested={sourcePath:'C:/Families/source.rfa',nestedFamilyId:23,outputPath:'C:/Families/neutral.rfa'};

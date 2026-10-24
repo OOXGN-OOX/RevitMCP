@@ -17,6 +17,7 @@ internal static partial class RevitTools
         var rows = instances.OrderBy(i=>i.Value).Select(id => {
             var i = (FamilyInstance)doc.GetElement(id);
             return new { instanceId=id.Value, uniqueId=i.UniqueId, familyId=i.Symbol.Family.Id.Value, family=i.Symbol.FamilyName,
+                categoryId=i.Category?.Id.Value, category=i.Category?.Name,
                 typeId=i.Symbol.Id.Value, type=i.Symbol.Name, transform=FFrameInfo(i.GetTransform()),
                 hostId=i.Host?.Id.Value, levelId=i.LevelId.Value, superComponentId=i.SuperComponent?.Id.Value,
                 i.HandFlipped, i.FacingFlipped, i.Mirrored,
@@ -61,11 +62,11 @@ internal static partial class RevitTools
             }).ToArray() };
     }).ToArray() ?? [];
 
-    private static FamilyReloadComparison.Report RequireFamilyStatePreserved(JsonElement before, JsonElement after)
+    private static FamilyReloadComparison.Report RequireFamilyStatePreserved(JsonElement before, JsonElement after,JsonElement? expectedChanges=null)
     {
-        var report=FamilyReloadComparison.Compare(before,after);
+        var report=FamilyReloadComparison.Compare(before,after,expectedChanges);
         if (!report.Passed)
-            throw new RevitOperationException("Reload changed or removed existing types/instances, placement, native systems or connector references, or added unexpected root instances. The operation was rolled back.",
+            throw new RevitOperationException("Reload violated preservation or an explicit expectedChanges contract. Review changed/removed instances, types, placement, systems and references in diagnostics.preservation. The operation was rolled back.",
                 new { before, after, preservationPassed=false, preservation=report });
         return report;
     }

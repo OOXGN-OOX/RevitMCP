@@ -72,6 +72,7 @@ internal static partial class RevitTools
         if(existing.Length>1) throw new ArgumentException("Existing family name is ambiguous.");
         if(existing.Length==1 && FString(args,"parameterPolicy")=="rejectExisting") throw new ArgumentException("Family already exists; parameterPolicy rejects replacement.");
         JsonElement? before=existing.Length==1 ? FamilyInstanceState(document,existing[0]) : null;
+        if(before is null&&args.TryGetProperty("expectedChanges",out _)) throw new ArgumentException("expectedChanges requires an existing family.");
         var policy=new FamilyLoadPolicy(FString(args,"parameterPolicy"),FString(args,"sharedFamilySource"));
         var loaded=document.LoadFamily(path,policy,out var family);
         if(policy.Rejected) throw new InvalidOperationException("Family replacement was rejected by parameterPolicy.");
@@ -88,11 +89,13 @@ internal static partial class RevitTools
     {
         var family=ResolveStateFamily(doc,result.GetProperty("after"));
         var after=FamilyInstanceState(doc,family);
-        var preservation=result.GetProperty("before").ValueKind!=JsonValueKind.Null ? RequireFamilyStatePreserved(result.GetProperty("before"),after) : null;
+        JsonElement? expected=args.TryGetProperty("expectedChanges",out var contracts) ? contracts : null;
+        var preservation=result.GetProperty("before").ValueKind!=JsonValueKind.Null ? RequireFamilyStatePreserved(result.GetProperty("before"),after,expected) : null;
         var values=JsonNode.Parse(result.GetRawText())!.AsObject();
         values["familyId"]=family.Id.Value;
         values["after"]=JsonNode.Parse(after.GetRawText());
         values["preservation"]=JsonSerializer.SerializeToNode(preservation,JsonTools.SerializerOptions);
+        values["expectedChanges"]=expected.HasValue ? JsonNode.Parse(expected.Value.GetRawText()) : null;
         values["preservationPassed"]=true;
         values["verificationStage"]="afterCommit";
         return JsonSerializer.SerializeToElement(values);

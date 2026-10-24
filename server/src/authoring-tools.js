@@ -3,6 +3,19 @@ const id = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const plan = z.object({ planId: z.string().min(1).max(80) }).strict();
 const write = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const point = z.object({ xMeters: z.number().finite().min(-100000).max(100000), yMeters: z.number().finite().min(-100000).max(100000) }).strict();
+const exactName = z.string().min(1).max(200);
+const connectorId = z.number().int().min(0).max(2147483647);
+const classification = z.enum(['SupplyAir','ReturnAir','ExhaustAir','OtherAir','UndefinedSystemType','Global']);
+const unique = (items,key) => new Set(items.map(key)).size === items.length;
+const expectedChange = z.object({
+  instanceId:id, uniqueId:z.string().min(1).max(200),
+  nestedType:z.object({before:z.object({family:exactName,typeId:id,type:exactName}).strict(),after:z.object({family:exactName,type:exactName}).strict()}).strict().optional(),
+  systemClassification:z.object({before:z.string().max(1000),after:z.string().max(1000)}).strict().refine(c=>c.before!==c.after,'Classification must change.').optional(),
+  connectorClassifications:z.array(z.object({connectorId,before:classification,after:classification}).strict().refine(c=>c.before!==c.after,'Classification must change.')).min(1).max(200).refine(a=>unique(a,c=>c.connectorId),'Duplicate connector ID.').optional(),
+  logicalSystemReferences:z.array(z.object({connectorId,systemId:id}).strict()).min(1).max(200).refine(a=>unique(a,c=>c.connectorId),'Duplicate connector ID.').optional(),
+  removeUnconnectedElectricalConnectors:z.array(connectorId).min(1).max(200).refine(a=>unique(a,c=>c),'Duplicate connector ID.').optional()
+}).strict().refine(c=>Object.keys(c).some(k=>!['instanceId','uniqueId'].includes(k)),'Specify an expected change.');
+const expectedChanges = z.array(expectedChange).min(1).max(500).refine(a=>unique(a,c=>c.instanceId),'Duplicate instance ID.');
 
 export function registerAuthoringTools(register) {
   register('export_view_image', 'Экспортировать существующий печатаемый вид Revit в PNG для визуальной проверки. Модель не меняется; создаётся новая подпапка в указанной локальной директории. Возвращает пути PNG.', z.object({ viewId: id, directory: z.string().min(1).max(170), pixelSize: z.number().int().min(500).max(4000).default(2000) }).strict(), { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
@@ -12,7 +25,7 @@ export function registerAuthoringTools(register) {
   register('apply_duplicate_family_types', 'Создать проверенные типоразмеры после подтверждения в Revit. При autoConfirm=true в локальных настройках окно подтверждения пропускается.', plan, write);
   register('preview_rename_family', 'Проверить переименование Family или FamilySymbol в активном проекте по elementId. list_family_types возвращает familyId для семейства и id для типоразмера. Возвращает старое/новое имя и затронутые типы. Проверяет конфликты; пробное переименование полностью откатывается. Экземпляры и системные типы не принимаются.', z.object({ elementId: id, newName: z.string().trim().min(1).max(200).refine(name => !/[\u0000-\u001f\u007f-\u009f]/u.test(name), 'Control characters are not allowed in names.') }).strict(), write);
   register('apply_rename_family', 'Переименовать Family или FamilySymbol по проверенному planId. Сохраняет ID элементов, экземпляры и параметры; смена имени Family отражается на всех его типах. План недействителен после изменения документа. При autoConfirm=true подтверждение пропускается.', plan, write);
-  register('preview_load_family', 'Проверить загрузку или перезагрузку локального RFA с откатом. Явно выбрать parameterPolicy: rejectExisting — запрет замены, preserve — сохранить значения параметров, overwrite — заменить значения. sharedFamilySource выбирает источник общих вложений: project или file. Файл проверяется по SHA-256 при apply.', z.object({ path: z.string().min(1).max(240), parameterPolicy: z.enum(['rejectExisting','preserve','overwrite']), sharedFamilySource: z.enum(['project','file']) }).strict(), write);
+  register('preview_load_family', 'Проверить загрузку или перезагрузку локального RFA с откатом. parameterPolicy: rejectExisting/preserve/overwrite. sharedFamilySource: project/file. expectedChanges задаёт точные ID/UniqueId и переходы классификации, вложенных типов, удаление свободных электрических портов; физические связи и размещение обязательны. Полный diff сохраняется; apply повторяет тот же контракт и проверяет SHA-256 файла.', z.object({ path: z.string().min(1).max(240), parameterPolicy: z.enum(['rejectExisting','preserve','overwrite']), sharedFamilySource: z.enum(['project','file']),expectedChanges:expectedChanges.optional() }).strict(), write);
   register('apply_load_family', 'Загрузить проверенное семейство после подтверждения в Revit. При autoConfirm=true в локальных настройках окно подтверждения пропускается.', plan, write);
   register('preview_create_room_separators', 'Проверить прямые линии разделения помещений на плане этажа. Координаты XY в метрах от внутреннего начала. Реальное создание и откат; линии сохранятся только после apply.', z.object({ viewId: id.optional(), lines: z.array(z.object({ start: point, end: point }).strict()).min(1).max(100) }).strict(), write);
   register('apply_create_room_separators', 'Создать проверенные линии разделения помещений после подтверждения в Revit. При autoConfirm=true в локальных настройках окно подтверждения пропускается.', plan, write);
