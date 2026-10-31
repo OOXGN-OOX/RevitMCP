@@ -28,6 +28,7 @@ internal static partial class RevitTools
         start=curve.IsBound ? FCoordinates(curve.GetEndPoint(0)) : null,end=curve.IsBound ? FCoordinates(curve.GetEndPoint(1)) : null,
         center=curve is Arc arc ? FCoordinates(arc.Center) : null,radiusMeters=curve is Arc a ? (double?)FMeters(a.Radius) : null,
         points=curve.Tessellate().Select(p=>FCoordinates(p)).ToArray()};
+    private static object? AColor(Color color)=>color.IsValid ? new {r=color.Red,g=color.Green,b=color.Blue} : null;
     private static GraphicsStyle AStyle(FamilyBuildContext ctx,JsonElement reference)=>ctx.Get(reference) as GraphicsStyle??throw new ArgumentException("lineStyle must identify a GraphicsStyle.");
     private static void AStyle(FamilyBuildContext ctx,Element element,JsonElement op)
     {
@@ -164,7 +165,7 @@ internal static partial class RevitTools
             origin=FCoordinates(v.Origin),right=FCoordinates(v.RightDirection,false),up=FCoordinates(v.UpDirection,false),normal=FCoordinates(v.ViewDirection,false)}).ToArray(),
         textTypes=new FilteredElementCollector(doc).WhereElementIsElementType().OfType<TextElementType>().OrderBy(t=>t.Id.Value).Select(t=>new {id=t.Id.Value,name=t.Name,nativeClass=t.GetType().Name,parameters=AParameters(doc,t)}).ToArray(),
         regionTypes=new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).Cast<FilledRegionType>().OrderBy(t=>t.Id.Value).Select(t=>new {id=t.Id.Value,name=t.Name,parameters=AParameters(doc,t)}).ToArray(),
-        lineStyles=new FilteredElementCollector(doc).OfClass(typeof(GraphicsStyle)).Cast<GraphicsStyle>().Where(s=>s.GraphicsStyleType==GraphicsStyleType.Projection).OrderBy(s=>s.Id.Value).Select(s=>new {id=s.Id.Value,name=s.Name,categoryId=s.GraphicsStyleCategory.Id.Value,lineWeight=s.GraphicsStyleCategory.GetLineWeight(GraphicsStyleType.Projection),linePatternId=s.GraphicsStyleCategory.GetLinePatternId(GraphicsStyleType.Projection).Value,color=new {r=s.GraphicsStyleCategory.LineColor.Red,g=s.GraphicsStyleCategory.LineColor.Green,b=s.GraphicsStyleCategory.LineColor.Blue}}).ToArray(),
+        lineStyles=new FilteredElementCollector(doc).OfClass(typeof(GraphicsStyle)).Cast<GraphicsStyle>().Where(s=>s.GraphicsStyleType==GraphicsStyleType.Projection).OrderBy(s=>s.Id.Value).Select(s=>new {id=s.Id.Value,name=s.Name,categoryId=s.GraphicsStyleCategory.Id.Value,lineWeight=s.GraphicsStyleCategory.GetLineWeight(GraphicsStyleType.Projection),linePatternId=s.GraphicsStyleCategory.GetLinePatternId(GraphicsStyleType.Projection).Value,color=AColor(s.GraphicsStyleCategory.LineColor)}).ToArray(),
         fillPatterns=new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement)).Cast<FillPatternElement>().OrderBy(p=>p.Id.Value).Select(p=>new {id=p.Id.Value,name=p.Name,target=p.GetFillPattern().Target.ToString(),solid=p.GetFillPattern().IsSolidFill}).ToArray(),
         sharedParameters=new FilteredElementCollector(doc).OfClass(typeof(SharedParameterElement)).Cast<SharedParameterElement>().OrderBy(p=>p.Id.Value).Select(p=>new {id=p.Id.Value,name=p.Name,guid=p.GuidValue.ToString()}).ToArray()};
     private static object AStyleState(Document doc)=>new {
