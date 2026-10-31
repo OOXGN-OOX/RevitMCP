@@ -1,5 +1,6 @@
-import { registerFamilyTools } from './family-tools.js';
+import { registerFamilyTools,familyOperationCatalog } from './family-tools.js';
 import { registerParameterTools } from './parameter-tools.js';
+import {registerAnnotationEditTools} from './annotation-edit-tools.js';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
@@ -35,7 +36,7 @@ function register(name, description, inputSchema, annotations = { readOnlyHint: 
     annotations
   }, async (args, ctx) => {
     try {
-      const result = await callRevit(name, args, { signal: ctx?.mcpReq?.signal });
+      const result = name==='get_family_operation_catalog' ? familyOperationCatalog(args) : await callRevit(name, args, { signal: ctx?.mcpReq?.signal });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return { isError: true, content: [{ type: 'text', text: error.details === undefined ? error.message : JSON.stringify({message:error.message,...error.details},null,2) }] };
@@ -108,6 +109,7 @@ register('get_element_properties', 'Получить свойства, габа�
 }));
 register('select_elements', 'Выбрать указанные элементы в интерфейсе Revit. Модель не меняется.', z.object({ elementIds }), { readOnlyHint: false, destructiveHint: false, openWorldHint: false });
 registerParameterTools(register);
+registerAnnotationEditTools(register);
 register('preview_create_levels', 'Проверить имена и отметки новых уровней. Ничего не создаёт.', z.object({
   levels: z.array(z.object({ name: z.string().min(1).max(100), elevationMeters: z.number().finite().min(-1000).max(10000) })).min(1).max(30)
 }));

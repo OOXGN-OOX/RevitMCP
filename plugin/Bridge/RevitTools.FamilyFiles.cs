@@ -91,14 +91,14 @@ internal static partial class RevitTools
             snapshots.Add(new { name = type.Name, values = fm.GetParameters().OrderBy(p => p.Id.Value).Select(p => new { name = p.Definition.Name, guid = p.IsShared ? p.GUID.ToString() : null,
                 hasValue = type.HasValue(p), value = FParameterValue(type, p), displayValue = type.HasValue(p) ? type.AsValueString(p) : null,
                 unitId = UnitUtils.IsMeasurableSpec(p.Definition.GetDataType()) ? p.GetUnitTypeId().TypeId : null }).ToArray(),
-                geometry = FGeometry(doc, mesh, maxTriangles), connectors = FConnectors(doc) });
+                geometry = FGeometry(doc, mesh, maxTriangles), connectors = FConnectors(doc),annotations=AState(doc) });
         }
         object? untyped = null;
-        if (types.Length == 0) { doc.Regenerate(); untyped = new { geometry = FGeometry(doc, mesh, maxTriangles), connectors = FConnectors(doc) }; }
+        if (types.Length == 0) { doc.Regenerate(); untyped = new { geometry = FGeometry(doc, mesh, maxTriangles), connectors = FConnectors(doc),annotations=AState(doc) }; }
         tx.RollBack();
         return JsonSerializer.SerializeToElement(new { category = doc.OwnerFamily.FamilyCategory?.Name, categoryId = doc.OwnerFamily.FamilyCategory?.Id.Value,
             placement = doc.OwnerFamily.FamilyPlacementType.ToString(), shared = doc.OwnerFamily.get_Parameter(BuiltInParameter.FAMILY_SHARED)?.AsInteger() == 1,
-            parameters, types = snapshots, untyped, materials = new FilteredElementCollector(doc).OfClass(typeof(Material)).Cast<Material>().OrderBy(m => m.Id.Value).Select(m => new { id = m.Id.Value, name = m.Name }).ToArray(),
+            parameters, types = snapshots, untyped,annotationStyles=AStyleState(doc), materials = new FilteredElementCollector(doc).OfClass(typeof(Material)).Cast<Material>().OrderBy(m => m.Id.Value).Select(m => new { id = m.Id.Value, name = m.Name }).ToArray(),
             subcategories = doc.OwnerFamily.FamilyCategory?.SubCategories.Cast<Category>().OrderBy(c => c.Id.Value).Select(c => new { id = c.Id.Value, name = c.Name, materialId = c.Material?.Id.Value }).ToArray(),
             views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).Select(v => new { id = v.Id.Value, name = v.Name, kind = v.ViewType.ToString() }).ToArray(),
             referencePlanes = new FilteredElementCollector(doc).OfClass(typeof(ReferencePlane)).Cast<ReferencePlane>().OrderBy(p => p.Id.Value).Select(p => new { id = p.Id.Value, name = p.Name, bubble = FCoordinates(p.BubbleEnd), free = FCoordinates(p.FreeEnd), normal = FCoordinates(p.Normal, false) }).ToArray(),

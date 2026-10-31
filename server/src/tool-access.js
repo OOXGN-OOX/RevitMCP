@@ -5,5 +5,5 @@ export function accessMode(value = process.env.REVIT_MCP_ACCESS ?? 'write') {
 
 export function isModelWriteTool(name) {
   return /^(preview_|apply_)/.test(name)
-    || ['get_schedulable_fields', 'validate_family_file', 'export_model'].includes(name);
+    || ['get_schedulable_fields', 'validate_family_file','validate_annotation_family', 'export_model'].includes(name);
 }

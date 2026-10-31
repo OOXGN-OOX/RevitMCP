@@ -44,9 +44,13 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   const tools = listed.result.tools;
   const names = tools.map(tool => tool.name);
   assert.equal(new Set(names).size, names.length);
+  const catalog=await rpc('tools/call',{name:'get_family_operation_catalog',arguments:{action:'annotationText'}});
+  assert.ok(!catalog.result?.isError);const catalogResult=JSON.parse(catalog.result.content[0].text);
+  assert.equal(catalogResult.operations[0].schema.properties.text.type,'string');
+  assert.equal(catalogResult.capabilities.labelCompositionRead,false);
   const source = await readFile(new URL('../../plugin/Bridge/RevitTools.cs', import.meta.url), 'utf8');
   const routed = [...source.slice(0, source.indexOf('private static object Ping')).matchAll(/"([a-z_]+)"\s*=>/g)].map(match => match[1]);
-  const local = ['store_project_data', 'store_room_data', 'query_stored_data', 'get_running_revit_instances'];
+  const local = ['store_project_data', 'store_room_data', 'query_stored_data', 'get_running_revit_instances','get_family_operation_catalog'];
   assert.deepEqual(names.filter(name => !local.includes(name)).sort(), [...new Set(routed)].sort());
   for (const name of ['preview_place_hosted_families', 'apply_create_dimensions', 'preview_tag_rooms', 'apply_color_by_parameter'])
     assert.ok(names.includes(name), `Missing tool ${name}`);

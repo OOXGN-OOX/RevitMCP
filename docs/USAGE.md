@@ -14,6 +14,9 @@
 
 | Задача | Инструменты |
 | --- | --- |
+| Аннотационные семейства и метки | `get_family_operation_catalog`, `read_family_annotations`, `preview_build_family`; [2D-графика и ограничения Label](ANNOTATION-FAMILIES.md) |
+| Изменение существующих марок | `read_tags`, `preview_edit_tags` / `apply_edit_tags` |
+| Оформление видов и Generic Annotation | `get_view_annotation_resources`, `read_view_annotations`, `preview_edit_view_annotations` / `apply_edit_view_annotations` |
 | Запись параметров, включая ElementId | `get_parameter_value_options`, `preview_set_parameter` / `apply_parameter_plan`; [формат значений](PARAMETERS.md) |
 | Двери и окна | `preview_place_hosted_families` / `apply_place_hosted_families` |
 | Новые типоразмеры | `preview_duplicate_family_types` / `apply_duplicate_family_types` |

@@ -30,6 +30,11 @@ try {
   const mepItems=listing.result.tools.find(t=>t.name==='preview_create_mep')?.inputSchema?.properties?.segments?.items;
   if(!(mepItems?.anyOf??mepItems?.oneOf??[]).some(s=>s.properties?.kind?.const==='flexPipe'&&s.properties?.points?.maxItems===100))
     throw new Error('Packaged server is missing flexible pipe contracts');
+  for(const name of ['read_family_annotations','get_family_operation_catalog','preview_edit_tags','preview_edit_view_annotations','validate_annotation_family'])
+    if(!listing.result.tools.some(t=>t.name===name))throw new Error('Packaged server is missing '+name);
+  const catalog=await rpc('tools/call',{name:'get_family_operation_catalog',arguments:{action:'annotationCurve'}});
+  if(catalog.error||catalog.result?.isError||!JSON.parse(catalog.result.content[0].text).operations[0].schema.properties.curve)
+    throw new Error('Packaged operation catalog is unavailable');
   const result = { server: hello.result.serverInfo, tools: listing.result.tools.length };
   if (tool) {
     if (!['revit_ping', 'get_project_info'].includes(tool)) throw new Error('Smoke probe permits read-only tools only');

@@ -44,7 +44,7 @@ internal static partial class RevitTools
         foreach (var key in new[] { "category", "categoryId", "placement", "shared" })
             if (!FJsonEquivalent(before.GetProperty(key), after.GetProperty(key))) throw new InvalidOperationException("Family metadata changed after saving: " + key);
         if (before.GetProperty("parameters").GetRawText() != after.GetProperty("parameters").GetRawText()) throw new InvalidOperationException("Parameter definitions changed after saving/reopening.");
-        foreach (var key in new[] { "untyped", "nestedFamilies", "nested", "referencePlanes", "materials", "subcategories" })
+        foreach (var key in new[] { "untyped", "nestedFamilies", "nested", "referencePlanes", "materials", "subcategories","annotationStyles" })
             if (!FJsonEquivalent(before.GetProperty(key),after.GetProperty(key))) throw new InvalidOperationException("Family contents changed after saving/reopening: "+key);
         var types = after.GetProperty("types").EnumerateArray().ToDictionary(t => FString(t, "name"));
         if (types.Count != before.GetProperty("types").GetArrayLength()) throw new InvalidOperationException("Type count changed after saving.");
@@ -52,7 +52,7 @@ internal static partial class RevitTools
         {
             if (!types.TryGetValue(FString(original, "name"), out var actual)) throw new InvalidOperationException("Type disappeared after saving.");
             if (!FJsonEquivalent(original.GetProperty("values"), actual.GetProperty("values")) || !FJsonEquivalent(original.GetProperty("connectors"), actual.GetProperty("connectors"))
-                || !FJsonEquivalent(original.GetProperty("geometry"), actual.GetProperty("geometry"))) throw new InvalidOperationException("Values, geometry or connectors changed after saving type " + FString(original, "name"));
+                || !FJsonEquivalent(original.GetProperty("geometry"), actual.GetProperty("geometry"))||!FJsonEquivalent(original.GetProperty("annotations"), actual.GetProperty("annotations"))) throw new InvalidOperationException("Values, geometry, annotations or connectors changed after saving type " + FString(original, "name"));
         }
     }
     private static bool FJsonEquivalent(JsonElement a, JsonElement b) => FamilyReloadComparison.Equivalent(a,b);

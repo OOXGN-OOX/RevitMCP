@@ -151,6 +151,7 @@ internal static partial class RevitTools
     }
     private static void FApplyOperation(FamilyBuildContext ctx, JsonElement op)
     {
+        if(FAnnotationOperation(ctx,op))return;
         var doc = ctx.Document; var fm = doc.FamilyManager;
         switch (FString(op, "action"))
         {
