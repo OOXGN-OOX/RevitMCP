@@ -9,19 +9,6 @@ internal static partial class RevitTools
     private static double SheetUnits(double mm) => UnitUtils.ConvertToInternalUnits(mm, UnitTypeId.Millimeters);
     private static double SheetMm(double value) => UnitUtils.ConvertFromInternalUnits(value, UnitTypeId.Millimeters);
 
-    private static object ListSheetResources(UIApplication app)
-    {
-        var doc = RequireDocument(app);
-        return new {
-            titleBlocks = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks).WhereElementIsElementType()
-                .OfType<FamilySymbol>().Select(t => new { id=t.Id.Value, family=t.FamilyName, name=t.Name,
-                    parameters=t.Parameters.Cast<Parameter>().Select(p => new { name=p.Definition.Name, value=p.AsValueString() ?? p.AsString(), storageType=p.StorageType.ToString(), readOnly=p.IsReadOnly }).ToArray() }).ToArray(),
-            sheets = new FilteredElementCollector(doc).OfClass(typeof(ViewSheet)).Cast<ViewSheet>().Where(s=>!s.IsPlaceholder)
-                .Select(s=>new { id=s.Id.Value, number=s.SheetNumber, name=s.Name, widthMillimeters=SheetMm(s.Outline.Max.U-s.Outline.Min.U), heightMillimeters=SheetMm(s.Outline.Max.V-s.Outline.Min.V),
-                    viewports=s.GetAllViewports().Select(id=>{var v=(Viewport)doc.GetElement(id); var box=v.GetBoxOutline(); return new { id=id.Value, viewId=v.ViewId.Value, minXmm=SheetMm(box.MinimumPoint.X), minYmm=SheetMm(box.MinimumPoint.Y), maxXmm=SheetMm(box.MaximumPoint.X),maxYmm=SheetMm(box.MaximumPoint.Y) };}).ToArray() }).ToArray()
-        };
-    }
-
     private static object PreviewCreateSheets(UIApplication app, JsonElement args) =>
         PreviewOperation(app,args,"createSheets","Листы и размещение видов",CreateSheets);
     private static object ApplyCreateSheets(UIApplication app, JsonElement args, Func<bool>? cancelled) =>

@@ -32,7 +32,8 @@
 | Графика элементов | `preview_element_graphics` / `apply_element_graphics` |
 | Раскраска по параметру | `preview_color_by_parameter` / `apply_color_by_parameter` |
 | Листы А3 и экспликации | `list_sheet_resources`, `preview_create_sheets` / `apply_create_sheets` |
-| Компоновка и текст | `preview_finish_sheet` / `apply_finish_sheet` |
+| Исходные виды на листах | `preview_place_views_on_sheets` / `apply_place_views_on_sheets`; [координаты и ресурсы](SHEETS.md) |
+| Компоновка, заголовки видов и текст | `preview_finish_sheet` / `apply_finish_sheet`; [смещение заголовка](SHEETS.md) |
 | Вывод | `export_view_image`, `export_sheets_pdf` |
 | Удаление | `preview_delete_elements` / `apply_delete_plan` |
 

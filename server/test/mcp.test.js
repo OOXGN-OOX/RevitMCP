@@ -215,6 +215,43 @@ test('sheet layout rejects incomplete views and reversed crop boxes', () => {
   assert.equal(parse('export_sheets_pdf',{sheetIds:[],path:'C:/out.pdf'}),false);
 });
 
+test('existing view placement accepts absolute negative coordinates and validates the whole batch', () => {
+  const placement={sheetId:2798849,viewId:2792781,centerXmm:-250,centerYmm:400,viewportTypeId:12345};
+  assert.ok(parse('list_sheet_resources',{}));
+  assert.ok(parse('list_sheet_resources',{sheetId:placement.sheetId}));
+  assert.equal(parse('list_sheet_resources',{sheetId:0}),false);
+  assert.ok(parse('preview_place_views_on_sheets',{placements:[placement]}));
+  assert.ok(parse('preview_place_views_on_sheets',{placements:[{...placement,viewportTypeId:undefined}]}));
+  // A legend can be reused on distinct sheets; Revit decides whether each view is placeable.
+  assert.ok(parse('preview_place_views_on_sheets',{placements:[placement,{...placement,sheetId:2}]}));
+  for(const placements of [[],Array(51).fill(placement),[placement,placement],
+    [{...placement,viewId:0}],[{...placement,viewportTypeId:-1}],
+    [{...placement,centerXmm:Infinity}],[{...placement,centerYmm:NaN}],
+    [{...placement,centerXmm:-100001}],[{...placement,sourceViewId:3}]])
+    assert.equal(parse('preview_place_views_on_sheets',{placements}),false);
+  assert.ok(parse('apply_place_views_on_sheets',{planId:'preview-plan'}));
+  assert.equal(parse('apply_place_views_on_sheets',{planId:'preview-plan',placements:[placement]}),false);
+  assert.equal(parse('apply_place_views_on_sheets',{}),false);
+  for(const name of ['preview_place_views_on_sheets','apply_place_views_on_sheets'])
+    assert.equal(contracts.get(name).annotations.readOnlyHint,false);
+});
+
+test('viewport titles can be edited without moving, rescaling or creating text notes', () => {
+  const viewport={viewportId:2801470,viewportTypeId:12345,titleOnSheet:'В1',labelOffsetXmm:80,labelOffsetYmm:340,labelLineLengthMm:0};
+  const accepts=p=>parse('preview_finish_sheet',{sheetId:2798849,viewports:[p]});
+  assert.ok(accepts(viewport));
+  for(const changes of [{titleOnSheet:''},{labelOffsetXmm:-80},{labelOffsetYmm:-340},{labelLineLengthMm:-20},
+    {viewportId:1,titleOnSheet:'В2'},{viewportId:1,labelOffsetXmm:0},{viewportId:1,scale:100},
+    {viewportId:1,xMm:250,yMm:400}]) assert.ok(accepts(changes.viewportId?changes:{...viewport,...changes}));
+  for(const changes of [{viewportId:1},{viewportId:1,xMm:20},{viewportId:1,yMm:20},
+    {...viewport,viewportTypeId:0},{...viewport,labelOffsetXmm:Infinity},{...viewport,labelOffsetYmm:NaN},
+    {...viewport,labelLineLengthMm:100001},{...viewport,titleOnSheet:null},{...viewport,scale:1.5}])
+    assert.equal(accepts(changes),false);
+  assert.equal(parse('preview_finish_sheet',{sheetId:1,viewports:[viewport,viewport]}),false);
+  assert.equal(parse('preview_finish_sheet',{sheetId:1,viewports:[],notes:[]}),false);
+  assert.ok(parse('apply_finish_sheet',{planId:'preview-plan'}));
+});
+
 test('hosted placement requires one level selector and one sill selector', () => {
   const instance = { hostWallId: 1, familySymbolId: 2, levelId: 3, position: { xMeters: 1, yMeters: 2 } };
   assert.ok(parse('preview_place_hosted_families', { instances: [instance] }));
