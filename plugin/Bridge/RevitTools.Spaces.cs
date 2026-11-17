@@ -142,6 +142,13 @@ internal static partial class RevitTools
         if (!space.IsPointInSpace(point)) throw new InvalidOperationException("Created Space does not contain the verified source point.");
     }
 
+    private static void CheckSpaceConstraints(Space space, ElementId levelId, ElementId upperLevelId, double lowerOffset, double upperOffset)
+    {
+        if (space.LevelId!=levelId || space.UpperLimit?.Id!=upperLevelId ||
+            Math.Abs(space.BaseOffset-lowerOffset)>SpaceFeet(.001) || Math.Abs(space.LimitOffset-upperOffset)>SpaceFeet(.001))
+            throw new InvalidOperationException("Space vertical constraints differ from the requested values; metadata-only updates cannot change them.");
+    }
+
     private static void CopySpaceIdentity(Space space, Room room, bool names, bool numbers)
     {
         void Set(BuiltInParameter key, string value)
@@ -228,9 +235,7 @@ internal static partial class RevitTools
                     space = matches[0];
                     if (ReadSpaceSource(space)!.DocumentKey != key.DocumentKey) throw new InvalidOperationException("Stored source document differs.");
                     if (policy=="error") throw new InvalidOperationException("A Space with this stored source already exists.");
-                    if (space.LevelId!=hostLevel.Id || space.UpperLimit?.Id!=upperLevel.Id ||
-                        Math.Abs(space.BaseOffset-lowerOffset)>SpaceFeet(.001) || Math.Abs(space.LimitOffset-upperOffset)>SpaceFeet(.001))
-                        throw new InvalidOperationException("Existing Space has different vertical constraints; metadata-only updates cannot change them.");
+                    CheckSpaceConstraints(space, hostLevel.Id, upperLevel.Id, lowerOffset, upperOffset);
                     action = policy=="skip" ? "skip" : "updateNamesAndNumbers";
                     if (action!="skip") CopySpaceIdentity(space, room, Flag("copyNames", true), Flag("copyNumbers", true));
                 }
@@ -243,12 +248,15 @@ internal static partial class RevitTools
                     WriteSpaceSource(space, key);
                 }
                 doc.Regenerate(); ValidateCreatedSpace(space, phaseId, hostPoint);
+                CheckSpaceConstraints(space, hostLevel.Id, upperLevel.Id, lowerOffset, upperOffset);
                 var area = SpaceArea(space.Area); var sourceArea = SpaceArea(room.Area);
                 var row = new { roomId = room.Id.Value, roomUniqueId = room.UniqueId, roomNumber = room.Number, roomName = SpatialName(room),
                     action, spaceId = space.Id.Value, sourceAreaSquareMeters = sourceArea, spaceAreaSquareMeters = area,
                     areaDifferenceSquareMeters = area-sourceArea, areaDifferencePercent = (area-sourceArea)/sourceArea*100,
                     sourceBottomMeters = SpaceMeters(sourceBottom), sourceTopMeters = SpaceMeters(sourceTop),
                     bottomMeters = SpaceMeters(bottom), topMeters = SpaceMeters(top), verifiedPointMeters = DocPoint(hostPoint),
+                    hostLevelId = hostLevel.Id.Value, upperLevelId = upperLevel.Id.Value,
+                    lowerOffsetMeters = SpaceMeters(lowerOffset), upperOffsetMeters = SpaceMeters(upperOffset),
                     space = SpaceRecord(doc, space) };
                 if (sub.Commit()!=TransactionStatus.Committed) throw new InvalidOperationException("Revit rolled back the Space subtransaction.");
                 rows.Add(row);
@@ -268,6 +276,10 @@ internal static partial class RevitTools
     private static JsonElement CheckSpacesAfterCommit(Document doc, JsonElement args, JsonElement result)
     {
         CheckSpaceSourceFingerprint(doc, args);
+        var source = ResolveRoomSource(doc, args);
+        var type = (RevitLinkType)doc.GetElement(source.Link!.GetTypeId());
+        if (type.get_Parameter(BuiltInParameter.WALL_ATTR_ROOM_BOUNDING)?.AsInteger()!=1)
+            throw new InvalidOperationException("Room Bounding changed during commit.");
         var node = JsonNode.Parse(result.GetRawText())!.AsObject();
         foreach (var row in node["rows"]!.AsArray())
         {
@@ -276,6 +288,11 @@ internal static partial class RevitTools
             var point = row["verifiedPointMeters"]!;
             ValidateCreatedSpace(space, new ElementId(HostedReadId(args, "hostPhaseId")), new XYZ(
                 SpaceFeet(point["x"]!.GetValue<double>()), SpaceFeet(point["y"]!.GetValue<double>()), SpaceFeet(point["z"]!.GetValue<double>())));
+            CheckSpaceConstraints(space, new ElementId(row["hostLevelId"]!.GetValue<long>()), new ElementId(row["upperLevelId"]!.GetValue<long>()),
+                SpaceFeet(row["lowerOffsetMeters"]!.GetValue<double>()), SpaceFeet(row["upperOffsetMeters"]!.GetValue<double>()));
+            var stored = ReadSpaceSource(space);
+            if (stored is null || stored.LinkInstanceUniqueId!=source.Link.UniqueId || stored.RoomUniqueId!=row["roomUniqueId"]!.GetValue<string>() || stored.DocumentKey!=source.Document.ProjectInformation.UniqueId)
+                throw new InvalidOperationException("Space source association changed during commit.");
             if (row["action"]!.GetValue<string>()!="skip")
             {
                 if ((!args.TryGetProperty("copyNames",out var names)||names.GetBoolean()) && SpatialName(space)!=row["roomName"]!.GetValue<string>())
