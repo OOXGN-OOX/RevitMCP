@@ -156,18 +156,4 @@ internal static partial class RevitTools
                 sheets = sheets.Where(s => s.SheetCollectionId == c.Id).Select(s => new { id = s.Id.Value, name = s.Name, number = s.SheetNumber }).ToArray() }).ToArray(), args);
     }
 
-    private static object GetRoomBoundaries(UIApplication app, JsonElement args)
-    {
-        var doc = RequireDocument(app);
-        using var options = new SpatialElementBoundaryOptions { SpatialElementBoundaryLocation = Enum.Parse<SpatialElementBoundaryLocation>(JsonTools.GetString(args,"location","Finish")) };
-        return new { rooms = GraphicsReadIds(args,false).Select(id => {
-            var room = doc.GetElement(id) as Room ?? throw new ArgumentException($"{id.Value} is not a room.");
-            var loops = room.GetBoundarySegments(options);
-            return new { id = id.Value, room.Name, room.Number, closed = room.Area > 0,
-                loops = loops?.Select(loop => loop.Select(segment => {
-                    using var curve = segment.GetCurve();
-                    return new { elementId = segment.ElementId.Value, kind = curve.GetType().Name, points = curve.Tessellate().Select(p => DocPoint(p)).ToArray() };
-                }).ToArray()).ToArray() };
-        }).ToArray() };
-    }
 }

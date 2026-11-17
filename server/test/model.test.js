@@ -13,6 +13,20 @@ const tools = new Map();
 registerModelTools((name,description,schema) => tools.set(name,schema));
 const accepts = (name,args) => tools.get(name).safeParse(args).success;
 
+test('room reads select host, one link or all direct links without ambiguous IDs', () => {
+  for(const args of [{},{includeLinks:true},{linkInstanceId:10},{linkInstanceId:10,includeLinks:false},
+    {includeLinks:true,levelName:'Этаж 2',offset:500,limit:1}]) assert.ok(accepts('list_rooms',args));
+  for(const args of [{includeLinks:true,linkInstanceId:10},{linkInstanceId:0},{linkInstanceId:-1},
+    {linkInstanceId:1.5},{linkInstanceId:Number.MAX_SAFE_INTEGER+1},{includeLinks:'true'},
+    {offset:-1},{limit:501},{linkId:10}]) assert.equal(accepts('list_rooms',args),false);
+  assert.ok(accepts('get_room_boundaries',{elementIds:[1,2],linkInstanceId:10,location:'CoreCenter'}));
+  assert.ok(accepts('get_room_boundaries',{elementIds:[1]}));
+  for(const args of [{elementIds:[1],linkInstanceId:0},{elementIds:[1],includeLinks:true},
+    {elementIds:[1,1],linkInstanceId:10},{elementIds:[],linkInstanceId:10}])
+    assert.equal(accepts('get_room_boundaries',args),false);
+  for(const name of ['list_rooms','get_room_boundaries']) assert.equal(isModelWriteTool(name),false);
+});
+
 test('model changes reject ambiguous targets and degenerate transformations', () => {
   assert.ok(accepts('preview_move_elements',{elementIds:[1,2],translation:{x:0,y:0,z:1}}));
   assert.equal(accepts('preview_move_elements',{elementIds:[1,1],translation:{x:0,y:0,z:1}}),false);

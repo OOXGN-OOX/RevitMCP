@@ -16,6 +16,7 @@ import { registerRoofTools } from './roof-tools.js';
 import { registerMepTools } from './mep-tools.js';
 import { registerStructureTools } from './structure-tools.js';
 import { registerModelTools, parameterFilter } from './model-tools.js';
+import { registerSpaceTools } from './space-tools.js';
 
 const server = new McpServer({
   name: 'revit-mcp',
@@ -85,11 +86,6 @@ register('search_elements', 'Искать элементы по тексту, ID
   message: 'includeHiddenInView требует viewScope=activeView или viewId.'
 }));
 register('get_project_stats', 'Получить общие количества элементов, категорий, видов, листов, уровней и типов.', empty);
-register('list_rooms', 'Перечислить помещения и их площадь, периметр, объём и уровень.', z.object({
-  levelName: z.string().optional(),
-  offset: z.number().int().min(0).max(100000).default(0),
-  limit: z.number().int().min(1).max(500).default(200)
-}));
 register('get_material_quantities', 'Собрать площади и объёмы материалов по проекту или текущему выделению. Окрашенные поверхности не включаются.', z.object({
   scope: z.enum(['project', 'selection']).default('project')
 }));
@@ -213,6 +209,7 @@ registerMepTools(register);
 registerFamilyTools(register);
 registerStructureTools(register);
 registerModelTools(register);
+registerSpaceTools(register);
 
 function registerLocal(name, description, inputSchema, handler, annotations = { readOnlyHint: false, destructiveHint: false, openWorldHint: false }) {
   server.registerTool(name, { description, inputSchema, annotations }, async args => {

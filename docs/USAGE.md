@@ -29,6 +29,7 @@
 | Размеры по опорам | `list_annotation_types`, `get_element_references`, `preview_create_dimensions` / `apply_create_dimensions` |
 | Марки | `preview_tag_walls`, `preview_tag_rooms`, `preview_tag_mep` и соответствующие `apply_*` |
 | Оформление эталона | `read_documentation` |
+| Помещения связей и MEP Spaces | `list_revit_links`, `list_rooms`, `get_room_boundaries`, `preview_create_spaces_from_link` / `apply_create_spaces_from_link`, `list_spaces`; [источники и проверки](SPACES.md) |
 | Графика элементов | `preview_element_graphics` / `apply_element_graphics` |
 | Раскраска по параметру | `preview_color_by_parameter` / `apply_color_by_parameter` |
 | Листы А3 и экспликации | `list_sheet_resources`, `preview_create_sheets` / `apply_create_sheets` |

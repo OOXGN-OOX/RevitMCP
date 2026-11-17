@@ -86,6 +86,10 @@ internal static partial class RevitTools
                 "search_elements" => SearchElements(application, args),
                 "get_project_stats" => GetProjectStats(application),
                 "list_rooms" => ListRooms(application, args),
+                "list_revit_links" => ListRevitLinks(application),
+                "list_spaces" => ListSpaces(application, args),
+                "preview_create_spaces_from_link" => PreviewSpacesFromLink(application, args),
+                "apply_create_spaces_from_link" => ApplySpacesFromLink(application, args, isCancelled),
                 "get_material_quantities" => GetMaterialQuantities(application, args),
                 "list_family_types" => ListFamilyTypes(application, args),
                 "list_host_types" => ListHostTypes(application, args),
@@ -385,42 +389,6 @@ internal static partial class RevitTools
             levels = levelNames,
             categories = categoryCounts.OrderByDescending(pair => pair.Value).Take(40)
                 .Select(pair => new { category = pair.Key, count = pair.Value }).ToList()
-        };
-    }
-
-    private static object ListRooms(UIApplication app, JsonElement args)
-    {
-        var document = RequireDocument(app);
-        var levelFilter = JsonTools.GetString(args, "levelName");
-        var limit = Math.Clamp(JsonTools.GetInt(args, "limit", 200), 1, 500);
-        var offset = Math.Max(0, JsonTools.GetInt(args, "offset", 0));
-        var rooms = new List<Room>();
-        foreach (var room in new FilteredElementCollector(document)
-                     .OfCategory(BuiltInCategory.OST_Rooms)
-                     .WhereElementIsNotElementType()
-                     .Cast<Room>())
-        {
-            var levelName = document.GetElement(room.LevelId)?.Name;
-            if (levelFilter.Length > 0 && !string.Equals(levelName, levelFilter, StringComparison.OrdinalIgnoreCase)) continue;
-            rooms.Add(room);
-        }
-
-        return new
-        {
-            matchingCount = rooms.Count,
-            offset,
-            returnedCount = Math.Min(Math.Max(0, rooms.Count - offset), limit),
-            hasMore = offset + limit < rooms.Count,
-            rooms = rooms.Skip(offset).Take(limit).Select(room => new
-            {
-                id = room.Id.Value,
-                number = room.Number,
-                name = room.Name,
-                level = document.GetElement(room.LevelId)?.Name,
-                areaSquareMeters = UnitUtils.ConvertFromInternalUnits(room.Area, UnitTypeId.SquareMeters),
-                perimeterMillimeters = UnitUtils.ConvertFromInternalUnits(room.Perimeter, UnitTypeId.Millimeters),
-                volumeCubicMeters = UnitUtils.ConvertFromInternalUnits(room.Volume, UnitTypeId.CubicMeters)
-            }).ToList()
         };
     }
 

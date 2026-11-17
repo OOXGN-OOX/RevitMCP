@@ -55,6 +55,13 @@ test('MCP initialize/list and C# dispatcher expose matching tool contracts', asy
   for (const name of ['preview_place_hosted_families', 'apply_create_dimensions', 'preview_tag_rooms', 'apply_color_by_parameter'])
     assert.ok(names.includes(name), `Missing tool ${name}`);
   const deletion = tools.find(tool => tool.name === 'apply_delete_plan');
+  const rooms=tools.find(tool=>tool.name==='list_rooms');
+  assert.equal(rooms.inputSchema.properties.linkInstanceId.maximum,Number.MAX_SAFE_INTEGER);
+  assert.equal(rooms.inputSchema.properties.includeLinks.default,false);
+  assert.equal(rooms.annotations.readOnlyHint,true);
+  assert.ok(tools.find(tool=>tool.name==='get_room_boundaries').inputSchema.properties.linkInstanceId);
+  const invalidRoomSource=await rpc('tools/call',{name:'list_rooms',arguments:{includeLinks:true,linkInstanceId:1}});
+  assert.ok(invalidRoomSource.error||invalidRoomSource.result?.isError,'Ambiguous room source must fail before bridge access');
   const mepItems=tools.find(tool=>tool.name==='preview_create_mep').inputSchema.properties.segments.items;
   const flexSchema=(mepItems.anyOf??mepItems.oneOf??[]).find(s=>s.properties?.kind?.const==='flexPipe');
   assert.equal(flexSchema?.properties?.points?.maxItems,100,'The public MCP contract must expose flexible path points');

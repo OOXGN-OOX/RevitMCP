@@ -49,6 +49,8 @@ jobs:
         run: dotnet run --project tests/ParameterValues.Tests/ParameterValues.Tests.csproj -c Release
       - name: Test flexible pipe paths
         run: dotnet run --project tests/MepFlexPath.Tests/MepFlexPath.Tests.csproj -c Release
+      - name: Test linked room reads and coordinates
+        run: dotnet run --project tests/LinkedRooms.Tests/LinkedRooms.Tests.csproj -c Release
       - name: Test hot update and rollback
         shell: pwsh
         run: ./tests/updates.ps1
